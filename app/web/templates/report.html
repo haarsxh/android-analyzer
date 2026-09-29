@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+{% block title %}Report — {{ sample.filename }}{% endblock %}
+{% block content %}
+<h2>{{ sample.filename }}</h2>
+
+{% if sample.status == 'error' %}
+<div class="card"><p style="margin:0; color: var(--sev-critical)">Scan failed: {{ sample.error_message }}</p></div>
+{% elif sample.status in ('pending', 'running') %}
+<div class="card">
+  <p style="margin:0"><strong>Status:</strong> <span class="badge status-{{ sample.status }}">{{ sample.status }}</span></p>
+  <p style="margin:8px 0 0; color: var(--color-ink-muted-48)">Scan in progress — this page will refresh automatically.</p>
+</div>
+<script>setTimeout(() => location.reload(), 3000);</script>
+{% else %}
+
+<div class="section-grid">
+  <div class="card">
+    <h3 style="margin-top:0">App Score</h3>
+    <div style="font-size:40px; font-weight:700; font-family: var(--font-display); color: {{ '#34c759' if summary.security_score >= 70 else '#ff9f0a' if summary.security_score >= 40 else '#d70015' }}">
+      {{ summary.security_score }}<span style="font-size:18px; color: var(--color-ink-muted-48)">/100</span>
+    </div>
+    <p style="margin:4px 0 0; font-size:12px; color: var(--color-ink-muted-48)">Risk score: {{ summary.risk_score }} · {{ summary.total_findings }} active findings</p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">File Information</h3>
+    <table class="kv-table">
+      <tr><td>Filename</td><td>{{ sample.filename }}</td></tr>
+      <tr><td>Size</td><td>{{ (app.file_size / 1024) | round(1) }} KB</td></tr>
+      <tr><td>MD5</td><td style="word-break:break-all">{{ app.md5 }}</td></tr>
+      <tr><td>SHA1</td><td style="word-break:break-all">{{ app.sha1 }}</td></tr>
+      <tr><td>SHA256</td><td style="word-break:break-all">{{ app.sha256 }}</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">App Information</h3>
+    <table class="kv-table">
+      <tr><td>App Name</td><td>{{ app.app_name or '—' }}</td></tr>
+      <tr><td>Package</td><td>{{ app.package_name or '—' }}</td></tr>
+      <tr><td>Main Activity</td><td style="word-break:break-all">{{ app.main_activity or '—' }}</td></tr>
+      <tr><td>Version</td><td>{{ app.version_name }} ({{ app.version_code }})</td></tr>
+      <tr><td>SDK</td><td>Min {{ app.min_sdk }} · Target {{ app.target_sdk }} · Max {{ app.max_sdk or '—' }}</td></tr>
+    </table>
+  </div>
+</div>
+
+{% if summary.category_breakdown %}
+<div class="card">
+  <h3 style="margin-top:0">Score Breakdown by Category</h3>
+  <p style="margin:0 0 var(--space-sm); color: var(--color-ink-muted-48); font-size:13px;">
+    Why the App Score is what it is — each category is scored the same way, independently.
+  </p>
+  {% for cat in summary.category_breakdown %}
+  <div style="margin-bottom: var(--space-sm)">
+    <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px;">
+      <span>{{ cat.category }}</span>
+      <span style="color: var(--color-ink-muted-48)">{{ cat.score }}/100 · {{ cat.total_findings }} finding(s)</span>
+    </div>
+    <div style="background: var(--color-divider-soft); border-radius: var(--radius-pill); height:8px; overflow:hidden;">
+      <div style="width: {{ cat.score }}%; height:100%; background: {{ '#34c759' if cat.score >= 70 else '#ff9f0a' if cat.score >= 40 else '#d70015' }};"></div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="section-grid section-grid-4">
+  {% for label, comps in [
+    ('Exported Activities', app.activities),
+    ('Exported Services', app.services),
+    ('Exported Receivers', app.receivers),
+    ('Exported Providers', app.providers)
+  ] %}
+  {% set exported = comps | selectattr('exported', 'equalto', 'true') | list %}
+  <div class="stat-card" onclick="toggleSection('comp-{{ loop.index }}')">
+    <div class="stat-count">{{ exported | length }}<span class="stat-count-total">/{{ comps | length }}</span></div>
+    <div class="stat-label">{{ label }}</div>
+    <div class="stat-view">View all ▾</div>
+  </div>
+  {% endfor %}
+</div>
+
+{% for label, comps in [
+  ('Exported Activities', app.activities),
+  ('Exported Services', app.services),
+  ('Exported Receivers', app.receivers),
+  ('Exported Providers', app.providers)
+] %}
+<div class="card comp-detail" id="comp-{{ loop.index }}" style="display:none">
+  <h3 style="margin-top:0">{{ label }}</h3>
+  <table>
+    <thead><tr><th>Name</th><th>Exported</th><th>Permission</th></tr></thead>
+    <tbody>
+      {% for c in comps %}
+      <tr>
+        <td style="word-break:break-all">{{ c.name }}</td>
+        <td>{{ 'Yes' if c.exported == 'true' else 'No' }}</td>
+        <td>{{ c.permission or '—' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3">None declared.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+
+<div class="card">
+  <h3 style="margin-top:0">Signer Certificate</h3>
+  {% if app.certificates %}
+  {% for cert in app.certificates %}
+  <table class="kv-table" style="margin-bottom: var(--space-sm)">
+    <tr><td>Subject</td><td>{{ cert.subject }}</td></tr>
+    <tr><td>Issuer</td><td>{{ cert.issuer }}</td></tr>
+    <tr><td>Serial</td><td>{{ cert.serial_number }}</td></tr>
+    <tr><td>Valid</td><td>{{ cert.not_before or '—' }} → {{ cert.not_after or '—' }}</td></tr>
+  </table>
+  {% endfor %}
+  {% else %}
+  <p style="margin:0; color: var(--color-ink-muted-48)">No signing certificate information found.</p>
+  {% endif %}
+</div>
+
+<div class="card" style="display:flex; gap: var(--space-sm); flex-wrap:wrap;">
+  <a class="btn" href="{{ url_for('scanning.download_pdf', scan_id=scan_id) }}" style="text-decoration:none">Download PDF report</a>
+  {% if stored and stored.report_html_path %}
+  <a class="btn" href="{{ url_for('scanning.standalone_report', scan_id=scan_id) }}" style="text-decoration:none; background: var(--color-ink)">Standalone HTML report</a>
+  {% endif %}
+  {% if app.package_name %}
+  <a class="btn" href="{{ url_for('scanning.trend_view', package_name=app.package_name) }}" style="text-decoration:none; background: var(--color-ink)">Risk trend</a>
+  {% endif %}
+  <a class="btn" href="{{ url_for('scanning.dynamic_page') }}" style="text-decoration:none; background: var(--color-ink)">Run dynamic analysis</a>
+</div>
+
+{% if permission_details %}
+{% set risky_perms = permission_details | selectattr('risk', 'in', ['Critical', 'High']) | list %}
+{% set other_perms = permission_details | rejectattr('risk', 'in', ['Critical', 'High']) | list %}
+<div class="card">
+  <h3 style="margin-top:0">Critical &amp; Risky Permissions</h3>
+  {% if risky_perms %}
+  <p style="margin:0 0 var(--space-sm); color: var(--color-ink-muted-48); font-size:13px;">
+    This app requests {{ risky_perms | length }} permission(s) with Critical or High security impact, out of {{ permission_details | length }} total.
+  </p>
+  <table>
+    <thead><tr><th>Risk</th><th>Permission</th><th>What it allows</th></tr></thead>
+    <tbody>
+      {% for p in risky_perms %}
+      <tr>
+        <td><span class="badge sev-{{ p.risk | lower }}">{{ p.risk }}</span></td>
+        <td style="word-break:break-all">{{ p.short_name }}</td>
+        <td>{{ p.description }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="margin:0; color: var(--color-ink-muted-48)">No Critical or High-risk permissions requested.</p>
+  {% endif %}
+
+  {% if other_perms %}
+  <p style="margin: var(--space-sm) 0 0">
+    <a href="#" onclick="toggleSection('other-perms'); return false;">Show {{ other_perms | length }} other requested permission(s) ▾</a>
+  </p>
+  <div id="other-perms" style="display:none; margin-top: var(--space-sm)">
+    <table>
+      <thead><tr><th>Risk</th><th>Permission</th><th>What it allows</th></tr></thead>
+      <tbody>
+        {% for p in other_perms %}
+        <tr>
+          <td><span class="badge sev-{{ p.risk | lower }}">{{ p.risk }}</span></td>
+          <td style="word-break:break-all">{{ p.short_name }}</td>
+          <td>{{ p.description }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if geo_locations %}
+<div class="card">
+  <h3 style="margin-top:0">Server Locations</h3>
+  <div id="world-map">
+    <div id="world-map-tooltip" class="map-tooltip"></div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+<script>
+(function () {
+  const geoLocations = {{ geo_locations | tojson }};
+
+  // ip-api.com and world-atlas/Natural Earth name the same country
+  // differently for a handful of cases — normalize both sides before
+  // matching so highlighting doesn't silently miss a country.
+  const NAME_ALIASES = {
+    'united states': 'united states of america',
+    'south korea': 'south korea',
+    'north korea': 'north korea',
+    'russia': 'russia',
+    'czech republic': 'czechia',
+    'democratic republic of the congo': 'dem. rep. congo',
+    'republic of the congo': 'congo',
+    'ivory coast': "cote d'ivoire",
+    'united republic of tanzania': 'tanzania',
+    'united kingdom': 'united kingdom',
+    'laos': 'lao pdr',
+    'myanmar (burma)': 'myanmar',
+    'macedonia': 'north macedonia',
+    'bosnia and herzegovina': 'bosnia and herz.',
+    'dominican republic': 'dominican rep.',
+  };
+  function normalize(name) {
+    const lower = (name || '').toLowerCase();
+    return NAME_ALIASES[lower] || lower;
+  }
+  const wantedCountries = new Set(geoLocations.map(loc => normalize(loc.country)));
+
+  const container = document.getElementById('world-map');
+  const width = container.clientWidth || 700;
+  const height = width * 0.55;
+
+  const svg = d3.select('#world-map').append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .style('width', '100%').style('height', 'auto');
+
+  const projection = d3.geoNaturalEarth1().fitSize([width, height], { type: 'Sphere' });
+  const path = d3.geoPath(projection);
+  const tooltip = document.getElementById('world-map-tooltip');
+
+  d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(topology => {
+    const countries = topojson.feature(topology, topology.objects.countries).features;
+
+    svg.append('g').selectAll('path').data(countries).join('path')
+      .attr('d', path)
+      .attr('fill', d => wantedCountries.has(normalize(d.properties.name)) ? '#0066cc' : '#e0e0e0')
+      .attr('stroke', '#ffffff')
+      .attr('stroke-width', 0.5)
+      .style('cursor', d => wantedCountries.has(normalize(d.properties.name)) ? 'pointer' : 'default')
+      .on('mousemove', function (event, d) {
+        const matches = geoLocations.filter(loc => normalize(loc.country) === normalize(d.properties.name));
+        if (!matches.length) { tooltip.style.display = 'none'; return; }
+        const domains = matches.map(m => `${m.domain} (${m.ip})`).join('<br>');
+        tooltip.innerHTML = `<strong>${d.properties.name}</strong><br>${domains}`;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (event.offsetX + 12) + 'px';
+        tooltip.style.top = (event.offsetY + 12) + 'px';
+      })
+      .on('mouseleave', function () { tooltip.style.display = 'none'; });
+  });
+})();
+</script>
+<div class="card">
+  <table>
+    <thead><tr><th>Domain</th><th>IP</th><th>Location</th><th>Hosting provider</th></tr></thead>
+    <tbody>
+      {% for loc in geo_locations %}
+      <tr>
+        <td style="word-break:break-all">{{ loc.domain }}</td>
+        <td>{{ loc.ip }}</td>
+        <td>{{ ((loc.city ~ ', ') if loc.city else '') ~ (loc.country or '—') }}</td>
+        <td>{{ loc.isp or loc.org or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<h2>Findings (<span id="visible-count">{{ findings | length }}</span> of {{ findings | length }})</h2>
+
+<div class="card" style="display:flex; gap: var(--space-md); align-items:center; flex-wrap:wrap; padding: var(--space-sm) var(--space-lg);">
+  <input type="text" id="search-box" placeholder="Search title/description…" style="flex:1; min-width:200px; border-radius: var(--radius-pill);">
+  <label style="font-size:14px"><input type="checkbox" class="sev-filter" value="Critical" checked> Critical</label>
+  <label style="font-size:14px"><input type="checkbox" class="sev-filter" value="High" checked> High</label>
+  <label style="font-size:14px"><input type="checkbox" class="sev-filter" value="Medium" checked> Medium</label>
+  <label style="font-size:14px"><input type="checkbox" class="sev-filter" value="Low" checked> Low</label>
+  <label style="font-size:14px"><input type="checkbox" class="sev-filter" value="Info" checked> Info</label>
+  <label style="font-size:14px"><input type="checkbox" id="show-dismissed"> Show dismissed</label>
+</div>
+
+{% set source_labels = {
+  'android_checks': 'Manifest Analysis',
+  'sast_engine': 'Code Analysis (SAST)',
+  'malware_checks': 'Malware Analysis',
+  'geolocation': 'Server Locations',
+  'firebase_checker': 'Cloud/Firebase Misconfigurations',
+  'dynamic_frida': 'Dynamic Analysis (Runtime)'
+} %}
+
+{% for group in findings | groupby('source') %}
+<h3>{{ source_labels.get(group.grouper, group.grouper) }} <span style="color: var(--color-ink-muted-48); font-weight:400; font-size:16px">({{ group.list | length }})</span></h3>
+<table class="findings-table">
+  <thead><tr><th>Severity</th><th>Title</th><th>Description</th><th>Triage</th></tr></thead>
+  <tbody>
+    {% for f in group.list %}
+    <tr class="finding-row" data-severity="{{ f.severity }}" data-triage="{{ f.triage_status }}"
+        data-search="{{ (f.title ~ ' ' ~ f.description) | lower }}"
+        style="{{ 'opacity:0.45' if f.triage_status == 'dismissed' else '' }}">
+      <td><span class="badge sev-{{ f.severity | lower }}">{{ f.severity }}</span></td>
+      <td>{{ f.title }}</td>
+      <td>{{ f.description }}</td>
+      <td>
+        <form action="{{ url_for('scanning.triage_finding', finding_id=f.id) }}" method="post">
+          <select name="status" onchange="this.form.submit()" style="font-size:12px; padding:4px 8px;">
+            <option value="open" {{ 'selected' if f.triage_status == 'open' }}>Open</option>
+            <option value="reviewed" {{ 'selected' if f.triage_status == 'reviewed' }}>Reviewed</option>
+            <option value="dismissed" {{ 'selected' if f.triage_status == 'dismissed' }}>Dismissed (FP)</option>
+          </select>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No findings.</p>
+{% endfor %}
+
+<style>
+  .section-grid { display:flex; gap: var(--space-md); flex-wrap:wrap; margin: var(--space-md) 0; }
+  .section-grid .card { flex:1; min-width:220px; margin-bottom:0; }
+  .section-grid-4 .stat-card { flex:1; min-width:140px; }
+  .kv-table { width:100%; border:none; background:none; }
+  .kv-table tr td { border:none; padding:4px 0; font-size:13px; }
+  .kv-table tr td:first-child { color: var(--color-ink-muted-48); width:40%; }
+  .stat-card {
+    background: var(--color-surface-black);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md);
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .stat-card:hover { opacity: 0.85; }
+  .stat-count { font-size:24px; font-weight:700; font-family: var(--font-display); color: var(--color-primary-on-dark); }
+  .stat-count-total { font-size:14px; font-weight:400; color: var(--color-body-muted); }
+  .stat-label { font-size:13px; color: var(--color-on-dark); margin-top:4px; }
+  .stat-view { font-size:11px; color: var(--color-body-muted); margin-top:8px; }
+  #world-map { position: relative; }
+  .map-tooltip {
+    display: none;
+    position: absolute;
+    background: var(--color-surface-black);
+    color: var(--color-on-dark);
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    pointer-events: none;
+    z-index: 10;
+    max-width: 260px;
+  }
+  .comp-detail table { background:#fff; }
+</style>
+
+<script>
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function applyFilters() {
+  const search = document.getElementById('search-box').value.toLowerCase();
+  const activeSevs = Array.from(document.querySelectorAll('.sev-filter:checked')).map(el => el.value);
+  const showDismissed = document.getElementById('show-dismissed').checked;
+  let visible = 0;
+
+  document.querySelectorAll('.finding-row').forEach(row => {
+    const sev = row.dataset.severity;
+    const triage = row.dataset.triage;
+    const text = row.dataset.search || '';
+    let show = activeSevs.includes(sev) && text.includes(search);
+    if (triage === 'dismissed' && !showDismissed) show = false;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  document.getElementById('visible-count').textContent = visible;
+
+  document.querySelectorAll('.findings-table').forEach(table => {
+    const anyVisible = Array.from(table.querySelectorAll('.finding-row')).some(r => r.style.display !== 'none');
+    table.closest('table') ? null : null;
+    table.style.display = anyVisible ? '' : 'none';
+    const heading = table.previousElementSibling;
+    if (heading && heading.tagName === 'H3') heading.style.display = anyVisible ? '' : 'none';
+  });
+}
+
+document.getElementById('search-box').addEventListener('input', applyFilters);
+document.querySelectorAll('.sev-filter').forEach(el => el.addEventListener('change', applyFilters));
+document.getElementById('show-dismissed').addEventListener('change', applyFilters);
+applyFilters();
+</script>
+{% endif %}
+{% endblock %}

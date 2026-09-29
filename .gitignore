@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+uploads/*
+!uploads/.gitkeep
+workdir/*
+!workdir/.gitkeep
+reports/*
+!reports/.gitkeep
+*.db
+.env
+app/dynamic_analysis/frida_scripts/node_modules/

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Comparison Matrix — Android Analyzer{% endblock %}
+{% block content %}
+<h2>Comparison across {{ matrix.scans | length }} scans</h2>
+
+<div class="card">
+  <table>
+    <thead><tr><th>Scan</th><th>Risk score</th><th>Findings</th></tr></thead>
+    <tbody>
+      {% for s in matrix.scans %}
+      <tr>
+        <td><a href="{{ url_for('scanning.view_report', scan_id=s.scan_id) }}">{{ s.filename }}</a> <span style="color: var(--color-ink-muted-48); font-size:12px">({{ s.created_at | int }})</span></td>
+        <td>{{ s.risk_score }}</td>
+        <td>{{ s.total_findings }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h3>Findings across scans</h3>
+<div style="overflow-x:auto">
+<table>
+  <thead>
+    <tr>
+      <th>Severity</th>
+      <th>Title</th>
+      {% for s in matrix.scans %}
+      <th style="text-align:center">{{ loop.index }}</th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in matrix.rows %}
+    <tr>
+      <td><span class="badge sev-{{ row.severity | lower }}">{{ row.severity }}</span></td>
+      <td>{{ row.title }}</td>
+      {% for present in row.present %}
+      <td style="text-align:center; color: {{ 'var(--sev-low)' if present else 'var(--color-hairline)' }}">{{ '✓' if present else '—' }}</td>
+      {% endfor %}
+    </tr>
+    {% else %}
+    <tr><td colspan="{{ 2 + matrix.scans | length }}">No findings across any selected scan.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+<p style="color: var(--color-ink-muted-48); font-size:12px; margin-top: var(--space-sm)">
+  Columns are numbered left to right in the order shown above (oldest scan first).
+</p>
+
+<p><a href="{{ url_for('scanning.compare_matrix_page') }}">← Compare different scans</a></p>
+{% endblock %}

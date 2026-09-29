@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Comparison — Android Analyzer{% endblock %}
+{% block content %}
+<h2>Comparison</h2>
+<div class="card">
+  <p style="margin:0"><strong>A:</strong> {{ diff.scan_a.filename }} ({{ diff.scan_a.scan_id }})</p>
+  <p style="margin:0"><strong>B:</strong> {{ diff.scan_b.filename }} ({{ diff.scan_b.scan_id }})</p>
+  <p style="margin:8px 0 0; color: var(--color-ink-muted-48)">{{ diff.unchanged_count }} finding(s) unchanged between the two scans.</p>
+</div>
+
+<h3 style="color: var(--sev-high)">New in B ({{ diff.new_findings | length }})</h3>
+<table>
+  <thead><tr><th>Severity</th><th>Source</th><th>Title</th></tr></thead>
+  <tbody>
+    {% for f in diff.new_findings %}
+    <tr>
+      <td><span class="badge sev-{{ f.severity | lower }}">{{ f.severity }}</span></td>
+      <td>{{ f.source }}</td>
+      <td>{{ f.title }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="3">No new findings.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3 style="color: var(--sev-low)">Resolved since A ({{ diff.resolved_findings | length }})</h3>
+<table>
+  <thead><tr><th>Severity</th><th>Source</th><th>Title</th></tr></thead>
+  <tbody>
+    {% for f in diff.resolved_findings %}
+    <tr>
+      <td><span class="badge sev-{{ f.severity | lower }}">{{ f.severity }}</span></td>
+      <td>{{ f.source }}</td>
+      <td>{{ f.title }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="3">No resolved findings.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<p><a href="{{ url_for('scanning.compare_page') }}">← Compare different scans</a></p>
+{% endblock %}

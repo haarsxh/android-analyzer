@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Android Analyzer{% endblock %}</title>
+<style>
+  :root {
+    /* DESIGN.md tokens — Apple-inspired */
+    --color-primary: #0066cc;
+    --color-primary-focus: #0071e3;
+    --color-primary-on-dark: #2997ff;
+    --color-ink: #1d1d1f;
+    --color-body-muted: #cccccc;
+    --color-ink-muted-80: #333333;
+    --color-ink-muted-48: #7a7a7a;
+    --color-divider-soft: #f0f0f0;
+    --color-hairline: #e0e0e0;
+    --color-canvas: #ffffff;
+    --color-canvas-parchment: #f5f5f7;
+    --color-surface-pearl: #fafafc;
+    --color-surface-black: #000000;
+    --color-on-primary: #ffffff;
+    --color-on-dark: #ffffff;
+
+    --radius-xs: 5px;
+    --radius-sm: 8px;
+    --radius-md: 11px;
+    --radius-lg: 18px;
+    --radius-pill: 9999px;
+
+    --space-xxs: 4px;
+    --space-xs: 8px;
+    --space-sm: 12px;
+    --space-md: 17px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+    --space-xxl: 48px;
+    --space-section: 80px;
+
+    --font-display: "SF Pro Display", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-text: "SF Pro Text", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+    --sev-critical: #d70015;
+    --sev-high: #ff3b30;
+    --sev-medium: #ff9f0a;
+    --sev-low: #34c759;
+    --sev-info: #0066cc;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: var(--font-text);
+    font-size: 17px;
+    line-height: 1.47;
+    letter-spacing: -0.374px;
+    margin: 0;
+    background: var(--color-canvas-parchment);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  header {
+    background: var(--color-surface-black);
+    color: var(--color-on-dark);
+    height: 44px;
+    padding: 0 var(--space-lg);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header .brand {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: -0.12px;
+  }
+  header nav a {
+    color: var(--color-on-dark);
+    text-decoration: none;
+    margin-left: var(--space-lg);
+    font-family: var(--font-text);
+    font-size: 12px;
+    letter-spacing: -0.12px;
+    opacity: 0.82;
+  }
+  header nav a:hover { opacity: 1; color: var(--color-primary-on-dark); }
+
+  main {
+    padding: var(--space-xl) var(--space-lg) var(--space-section);
+    max-width: 1069px;
+    margin: 0 auto;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.374px;
+    color: var(--color-ink);
+    margin: 0 0 var(--space-md);
+  }
+  h2 { font-size: 28px; letter-spacing: 0.196px; margin-top: var(--space-xl); }
+  h3 { font-size: 21px; letter-spacing: 0.231px; }
+
+  a { color: var(--color-primary); }
+
+  table { width: 100%; border-collapse: collapse; margin-top: var(--space-md); background: var(--color-canvas); border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--color-hairline); }
+  th, td { padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--color-divider-soft); text-align: left; font-size: 14px; }
+  th { background: var(--color-surface-pearl); font-family: var(--font-text); font-weight: 600; letter-spacing: -0.224px; color: var(--color-ink-muted-80); }
+  tr:last-child td { border-bottom: none; }
+
+  .btn {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    border: none;
+    padding: 11px 22px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-family: var(--font-text);
+    font-size: 17px;
+    font-weight: 400;
+  }
+  .btn:hover { background: var(--color-primary-focus); }
+  .btn:active { transform: scale(0.95); }
+  .btn:focus-visible { outline: 2px solid var(--color-primary-focus); outline-offset: 2px; }
+
+  input[type=file], input[type=text], select {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-pill);
+    font-family: var(--font-text);
+    font-size: 14px;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  select { width: 100%; }
+
+  .flash {
+    background: var(--color-surface-pearl);
+    color: var(--color-ink);
+    border: 1px solid var(--color-hairline);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-md);
+    font-size: 14px;
+  }
+
+  .card {
+    background: var(--color-canvas);
+    border: 1px solid var(--color-hairline);
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-md);
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: -0.224px;
+    color: #fff;
+  }
+  .badge.sev-critical, .badge.status-error { background: var(--sev-critical); }
+  .badge.sev-high { background: var(--sev-high); }
+  .badge.sev-medium, .badge.status-pending, .badge.status-running { background: var(--sev-medium); color: var(--color-ink); }
+  .badge.sev-low, .badge.status-completed { background: var(--sev-low); color: var(--color-ink); }
+  .badge.sev-info { background: var(--sev-info); }
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">Android Analyzer</span>
+  <nav style="display:flex; align-items:center;">
+    {% if session.get('user_id') %}
+    <a href="{{ url_for('scanning.index') }}">Scans</a>
+    <a href="{{ url_for('scanning.compare_page') }}">Compare</a>
+    <a href="{{ url_for('scanning.trends_page') }}">Trends</a>
+    <a href="{{ url_for('scanning.dynamic_page') }}">Dynamic</a>
+    <span style="margin-left: var(--space-lg); font-size:12px; opacity:0.7;">{{ session.get('username') }}</span>
+    <form action="{{ url_for('auth.logout') }}" method="post" style="display:inline; margin-left: var(--space-sm);">
+      <button type="submit" style="background:none; border:none; color: var(--color-primary-on-dark); font-size:12px; cursor:pointer; padding:0;">Log out</button>
+    </form>
+    {% else %}
+    <a href="{{ url_for('auth.login') }}">Log in</a>
+    <a href="{{ url_for('auth.signup') }}">Sign up</a>
+    {% endif %}
+  </nav>
+</header>
+<main>
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      {% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}
+    {% endif %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

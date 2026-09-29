@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Scans — Android Analyzer{% endblock %}
+{% block content %}
+<div class="card" style="text-align:center; padding: var(--space-xxl) var(--space-lg);">
+  <h2 style="margin-top:0">Upload an APK</h2>
+  <p style="color: var(--color-ink-muted-48); margin-top: -8px; margin-bottom: var(--space-lg);">Static and dynamic security analysis for Android applications.</p>
+  <form action="{{ url_for('scanning.upload') }}" method="post" enctype="multipart/form-data" style="display:flex; gap: var(--space-sm); justify-content:center; align-items:center;">
+    <input type="file" name="apk" accept=".apk" required>
+    <button class="btn" type="submit">Scan</button>
+  </form>
+</div>
+
+<div style="display:flex; justify-content:space-between; align-items:baseline;">
+  <h2>Past scans</h2>
+  <div style="font-size:14px">
+    <a href="{{ url_for('scanning.index') }}" style="{{ 'font-weight:600' if not mine_only }}">All</a>
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('scanning.index', mine=1) }}" style="{{ 'font-weight:600' if mine_only }}">Mine ({{ current_user }})</a>
+  </div>
+</div>
+<table>
+  <thead><tr><th>Filename</th><th>Package</th><th>Uploaded by</th><th>Status</th><th>Created</th><th></th></tr></thead>
+  <tbody>
+    {% for s in samples %}
+    <tr>
+      <td>{{ s.filename }}</td>
+      <td>{{ s.package_name or '—' }}</td>
+      <td>{{ s.uploaded_by or '—' }}</td>
+      <td><span class="badge status-{{ s.status }}">{{ s.status }}</span></td>
+      <td>{{ s.created_at | int }}</td>
+      <td><a href="{{ url_for('scanning.view_report', scan_id=s.scan_id) }}">View report</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6">No scans yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

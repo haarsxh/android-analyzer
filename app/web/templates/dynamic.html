@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Dynamic Analysis — Android Analyzer{% endblock %}
+{% block content %}
+<h2>Dynamic Analysis</h2>
+
+<div class="card">
+  <h3>Connected devices</h3>
+  {% if devices %}
+    <table>
+      <thead><tr><th>Serial</th><th>State</th></tr></thead>
+      <tbody>
+        {% for d in devices %}
+        <tr><td>{{ d.serial }}</td><td>{{ d.state }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No devices detected. Connect a device or start an emulator with USB debugging enabled, then reload this page.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>Start a session</h3>
+  <form action="{{ url_for('scanning.dynamic_start') }}" method="post">
+    <p>
+      <label>Sample:
+        <select name="scan_id" required>
+          {% for s in samples %}
+          <option value="{{ s.scan_id }}">{{ s.filename }} ({{ s.package_name or 'unknown package' }})</option>
+          {% endfor %}
+        </select>
+      </label>
+    </p>
+    <p>
+      <label>Device serial: <input type="text" name="serial" placeholder="emulator-5554" required></label>
+    </p>
+    <p>
+      <label><input type="checkbox" name="capture_traffic"> Capture HTTPS traffic via mitmproxy</label>
+    </p>
+    <p>
+      <label><input type="checkbox" name="bypass_ssl_pinning"> Bypass SSL pinning (required for traffic capture on most apps)</label>
+    </p>
+    <p>
+      <label><input type="checkbox" name="bypass_root_detection"> Bypass root/emulator detection</label>
+    </p>
+    <button class="btn" type="submit">Start session</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Compare Scans — Android Analyzer{% endblock %}
+{% block content %}
+<h2>Compare two scans</h2>
+<p style="color: var(--color-ink-muted-48)">Useful for comparing two versions of the same app, or before/after a fix.</p>
+
+<div class="card">
+  <form action="{{ url_for('scanning.compare_result') }}" method="get">
+    <p>
+      <label>Baseline (A):
+        <select name="scan_a" required>
+          {% for s in samples %}
+          <option value="{{ s.scan_id }}">{{ s.filename }} ({{ s.package_name or 'unknown' }}) — {{ s.created_at | int }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </p>
+    <p>
+      <label>Compare against (B):
+        <select name="scan_b" required>
+          {% for s in samples %}
+          <option value="{{ s.scan_id }}">{{ s.filename }} ({{ s.package_name or 'unknown' }}) — {{ s.created_at | int }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </p>
+    <button class="btn" type="submit">Compare</button>
+  </form>
+</div>
+
+<p><a href="{{ url_for('scanning.compare_matrix_page') }}">Comparing more than two scans? Use the multi-scan matrix →</a></p>
+{% endblock %}

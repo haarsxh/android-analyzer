@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Compare Multiple Scans — Android Analyzer{% endblock %}
+{% block content %}
+<h2>Compare multiple scans</h2>
+<p style="color: var(--color-ink-muted-48)">Track how findings changed across an entire release train — pick two or more scans, ideally of the same package.</p>
+
+<div class="card">
+  <form action="{{ url_for('scanning.compare_matrix_result') }}" method="get">
+    <table>
+      <thead><tr><th></th><th>Filename</th><th>Package</th><th>Created</th></tr></thead>
+      <tbody>
+        {% for s in samples %}
+        <tr>
+          <td><input type="checkbox" name="scan_ids" value="{{ s.scan_id }}"></td>
+          <td>{{ s.filename }}</td>
+          <td>{{ s.package_name or '—' }}</td>
+          <td>{{ s.created_at | int }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4">No scans yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <button class="btn" type="submit" style="margin-top: var(--space-md)">Compare selected</button>
+  </form>
+</div>
+{% endblock %}

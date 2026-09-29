@@ -1,0 +1,7 @@
+Flask>=3.0
+androguard>=4.1.2
+frida>=16.2
+frida-tools>=13.0
+mitmproxy>=10.3
+Jinja2>=3.1
+xhtml2pdf>=0.2.16

@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block title %}Session — {{ sample.filename }}{% endblock %}
+{% block content %}
+<h2>Dynamic session: {{ sample.filename }}</h2>
+<p style="color: var(--color-ink-muted-48)">Package: {{ sample.package_name or '—' }}</p>
+
+<div style="display:flex; gap: var(--space-sm); margin-bottom: var(--space-lg)">
+  <form action="{{ url_for('scanning.dynamic_stop', scan_id=scan_id) }}" method="post">
+    <button class="btn" type="submit">Stop session</button>
+  </form>
+  <button class="btn" id="screenshot-btn" type="button" style="background: var(--color-ink)">Capture screenshot</button>
+</div>
+
+<style>
+  .log-pane {
+    background: var(--color-surface-pearl);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-md);
+    padding: var(--space-sm) var(--space-md);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: var(--color-ink-muted-80);
+    white-space: pre-wrap;
+    max-height: 300px;
+    overflow-y: auto;
+    margin: 0;
+  }
+  .session-layout {
+    display: flex;
+    gap: var(--space-lg);
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .live-screen-col {
+    flex: 0 0 260px;
+    width: 260px;
+  }
+  .session-info-col {
+    flex: 1 1 360px;
+    min-width: 0;
+  }
+</style>
+
+<div class="session-layout">
+  <div class="live-screen-col">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: var(--space-sm)">
+        <h3 style="margin:0">Live Screen</h3>
+        <button class="btn" id="live-toggle-btn" type="button" style="background: var(--color-ink); padding:6px 12px; font-size:12px;">Start</button>
+      </div>
+      <p id="live-hint" style="margin:0 0 var(--space-sm); font-size:11px; color: var(--color-ink-muted-48)">
+        Updates ~every 2s. Click/drag the screen to tap/swipe once live view is on.
+      </p>
+      <div style="background: var(--color-surface-black); border-radius: var(--radius-md); padding: var(--space-sm); display:flex; justify-content:center;">
+        <img id="live-screen-img" alt="Live device screen" style="max-width:100%; width:100%; border-radius: var(--radius-sm); display:none; user-select:none;">
+        <p id="live-screen-placeholder" style="color: var(--color-body-muted); font-size:13px; margin: var(--space-xl) 0; text-align:center;">Live view is off</p>
+      </div>
+
+      <div style="display:flex; gap: var(--space-xs); justify-content:center; margin-top: var(--space-sm);">
+        <button class="btn" id="key-back-btn" type="button" style="background: var(--color-ink); padding:6px 10px; font-size:12px;">← Back</button>
+        <button class="btn" id="key-home-btn" type="button" style="background: var(--color-ink); padding:6px 10px; font-size:12px;">● Home</button>
+        <button class="btn" id="key-recents-btn" type="button" style="background: var(--color-ink); padding:6px 10px; font-size:12px;">▢ Recents</button>
+      </div>
+
+      <form id="text-input-form" style="display:flex; gap: var(--space-xs); margin-top: var(--space-sm);">
+        <input type="text" id="device-text-input" placeholder="Type text…" style="flex:1; min-width:0; border-radius: var(--radius-pill); font-size:12px;">
+        <button class="btn" type="submit" style="padding:8px 14px; font-size:12px;">Send</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="session-info-col">
+    <div class="card">
+      <h3>Session log</h3>
+      <pre id="session-log" class="log-pane"></pre>
+    </div>
+
+    <div class="card">
+      <h3>Frida events</h3>
+      <pre id="frida-events" class="log-pane"></pre>
+    </div>
+
+    <div class="card">
+      <h3>Logcat (tail)</h3>
+      <pre id="logcat" class="log-pane"></pre>
+    </div>
+
+    <div class="card">
+      <h3>Screenshots</h3>
+      <div id="screenshots" style="display:flex; flex-wrap:wrap; gap: var(--space-sm)"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const scanId = {{ scan_id | tojson }};
+
+async function poll() {
+  const res = await fetch("{{ url_for('scanning.dynamic_poll', scan_id=scan_id) }}");
+  if (!res.ok) return;
+  const data = await res.json();
+  document.getElementById('session-log').textContent = (data.log || []).join('\n');
+  document.getElementById('frida-events').textContent = JSON.stringify(data.frida_events || [], null, 2);
+  document.getElementById('logcat').textContent = (data.logcat || []).join('\n');
+
+  const gallery = document.getElementById('screenshots');
+  gallery.innerHTML = '';
+  (data.screenshots || []).forEach(function (filename) {
+    const img = document.createElement('img');
+    img.src = `/dynamic/screenshots/${scanId}/${filename}`;
+    img.alt = filename;
+    img.style.cssText = 'width:140px; border-radius: var(--radius-sm); border:1px solid var(--color-hairline);';
+    gallery.appendChild(img);
+  });
+}
+poll();
+setInterval(poll, 3000);
+
+document.getElementById('screenshot-btn').addEventListener('click', async function () {
+  await fetch(`/dynamic/screenshot/${scanId}`, { method: 'POST' });
+  poll();
+});
+
+let liveInterval = null;
+const liveImg = document.getElementById('live-screen-img');
+const livePlaceholder = document.getElementById('live-screen-placeholder');
+const liveToggleBtn = document.getElementById('live-toggle-btn');
+
+function refreshLiveFrame() {
+  const img = new Image();
+  img.onload = function () {
+    liveImg.src = img.src;
+    liveImg.style.display = 'block';
+    livePlaceholder.style.display = 'none';
+  };
+  img.onerror = function () {
+    livePlaceholder.textContent = 'No active session — start a session to see the live screen.';
+    livePlaceholder.style.display = 'block';
+    liveImg.style.display = 'none';
+  };
+  img.src = `/dynamic/live/${scanId}?t=${Date.now()}`;
+}
+
+liveToggleBtn.addEventListener('click', function () {
+  if (liveInterval) {
+    clearInterval(liveInterval);
+    liveInterval = null;
+    liveToggleBtn.textContent = 'Start live view';
+    liveImg.style.display = 'none';
+    liveImg.style.cursor = 'default';
+    livePlaceholder.textContent = 'Live view is off';
+    livePlaceholder.style.display = 'block';
+  } else {
+    liveToggleBtn.textContent = 'Stop live view';
+    livePlaceholder.textContent = 'Loading…';
+    liveImg.style.cursor = 'crosshair';
+    refreshLiveFrame();
+    liveInterval = setInterval(refreshLiveFrame, 2000);
+  }
+});
+
+// Translate a click/drag point on the (possibly CSS-scaled) <img> into real
+// device pixel coordinates, using the image's natural size — screencap PNGs
+// are already full device resolution, so no separate size lookup is needed.
+function toDeviceCoords(clientX, clientY) {
+  const rect = liveImg.getBoundingClientRect();
+  const scaleX = liveImg.naturalWidth / rect.width;
+  const scaleY = liveImg.naturalHeight / rect.height;
+  return {
+    x: Math.round((clientX - rect.left) * scaleX),
+    y: Math.round((clientY - rect.top) * scaleY),
+  };
+}
+
+async function postJSON(url, body) {
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+}
+
+function refreshSoon() {
+  if (liveInterval) setTimeout(refreshLiveFrame, 400);
+}
+
+let dragStart = null;
+const DRAG_THRESHOLD_PX = 12; // below this, treat as a tap rather than a swipe
+
+liveImg.addEventListener('mousedown', function (e) {
+  if (!liveInterval) return;
+  dragStart = { x: e.clientX, y: e.clientY };
+});
+
+liveImg.addEventListener('mouseup', async function (e) {
+  if (!liveInterval || !dragStart) return;
+  const dx = e.clientX - dragStart.x;
+  const dy = e.clientY - dragStart.y;
+  const moved = Math.hypot(dx, dy);
+
+  if (moved < DRAG_THRESHOLD_PX) {
+    const p = toDeviceCoords(e.clientX, e.clientY);
+    await postJSON(`/dynamic/tap/${scanId}`, { x: p.x, y: p.y });
+  } else {
+    const p1 = toDeviceCoords(dragStart.x, dragStart.y);
+    const p2 = toDeviceCoords(e.clientX, e.clientY);
+    await postJSON(`/dynamic/swipe/${scanId}`, { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y });
+  }
+  dragStart = null;
+  refreshSoon();
+});
+
+document.getElementById('key-back-btn').addEventListener('click', async function () {
+  await postJSON(`/dynamic/key/${scanId}`, { key: 'back' });
+  refreshSoon();
+});
+document.getElementById('key-home-btn').addEventListener('click', async function () {
+  await postJSON(`/dynamic/key/${scanId}`, { key: 'home' });
+  refreshSoon();
+});
+document.getElementById('key-recents-btn').addEventListener('click', async function () {
+  await postJSON(`/dynamic/key/${scanId}`, { key: 'recents' });
+  refreshSoon();
+});
+
+document.getElementById('text-input-form').addEventListener('submit', async function (e) {
+  e.preventDefault();
+  const input = document.getElementById('device-text-input');
+  if (!input.value) return;
+  await postJSON(`/dynamic/text/${scanId}`, { text: input.value });
+  input.value = '';
+  refreshSoon();
+});
+</script>
+{% endblock %}

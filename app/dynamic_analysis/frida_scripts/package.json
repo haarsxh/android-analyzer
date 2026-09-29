@@ -1,0 +1,15 @@
+{
+  "name": "frida_scripts",
+  "version": "1.0.0",
+  "description": "Frida hook scripts for android-analyzer. Sources live in src/ and import frida-java-bridge (required since Frida 16 dropped the auto-injected Java global for raw scripts). Run `npm run build` to compile them to the bundled .js files that views.py actually loads.",
+  "private": true,
+  "scripts": {
+    "build": "for f in src/*.js; do name=$(basename \"$f\"); npx frida-compile \"$f\" -o \"$name\"; done"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "frida-compile": "^19.0.5",
+    "frida-java-bridge": "^7.0.13"
+  }
+}

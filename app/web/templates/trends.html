@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Trends — Android Analyzer{% endblock %}
+{% block content %}
+<h2>Risk trends by package</h2>
+<div class="card">
+  {% if packages %}
+  <table>
+    <thead><tr><th>Package</th><th></th></tr></thead>
+    <tbody>
+      {% for pkg in packages %}
+      <tr><td>{{ pkg }}</td><td><a href="{{ url_for('scanning.trend_view', package_name=pkg) }}">View trend →</a></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No scanned packages yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

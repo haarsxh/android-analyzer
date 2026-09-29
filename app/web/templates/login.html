@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Log in — Android Analyzer{% endblock %}
+{% block content %}
+<div class="card" style="max-width:380px; margin: var(--space-xxl) auto; padding: var(--space-xxl) var(--space-xl);">
+  <h2 style="margin-top:0; text-align:center">Log in</h2>
+  <form method="post">
+    <input type="hidden" name="next" value="{{ next or '' }}">
+    <p>
+      <label style="display:block; font-size:13px; color: var(--color-ink-muted-48); margin-bottom:4px;">Username</label>
+      <input type="text" name="username" value="{{ username or '' }}" required autofocus style="width:100%; border-radius: var(--radius-pill);">
+    </p>
+    <p>
+      <label style="display:block; font-size:13px; color: var(--color-ink-muted-48); margin-bottom:4px;">Password</label>
+      <input type="password" name="password" required style="width:100%; border-radius: var(--radius-pill);">
+    </p>
+    <button class="btn" type="submit" style="width:100%; margin-top: var(--space-sm)">Log in</button>
+  </form>
+  <p style="text-align:center; font-size:13px; margin-top: var(--space-md); color: var(--color-ink-muted-48)">
+    Don't have an account? <a href="{{ url_for('auth.signup') }}">Sign up</a>
+  </p>
+</div>
+{% endblock %}
