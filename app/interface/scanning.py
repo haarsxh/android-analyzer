@@ -23,6 +23,22 @@ def _current_user() -> str:
     return session.get("username", "anonymous")
 
 
+def _owned_sample(scan_id: str) -> dict:
+    """The scan, if the logged-in user uploaded it — otherwise 404.
+
+    Scans are private to their uploader: 404 (not 403) so other users can't
+    even confirm a scan ID exists.
+    """
+    sample = models.get_sample(scan_id)
+    if not sample or sample.get("uploaded_by") != _current_user():
+        abort(404)
+    return sample
+
+
+def _my_samples() -> list[dict]:
+    return models.list_samples_by_user(_current_user())
+
+
 bp = Blueprint("scanning", __name__)
 
 UPLOAD_ROOT = Path(__file__).resolve().parent.parent.parent / "uploads"
@@ -32,9 +48,7 @@ ALLOWED_EXTENSIONS = {".apk"}
 @bp.route("/", methods=["GET"])
 @login_required
 def index():
-    mine_only = request.args.get("mine") == "1"
-    samples = models.list_samples_by_user(_current_user()) if mine_only else models.list_samples()
-    return render_template("index.html", samples=samples, mine_only=mine_only, current_user=_current_user())
+    return render_template("index.html", samples=_my_samples(), current_user=_current_user())
 
 
 @bp.route("/upload", methods=["POST"])
@@ -64,10 +78,7 @@ def upload():
 @bp.route("/report/<scan_id>", methods=["GET"])
 @login_required
 def view_report(scan_id: str):
-    sample = models.get_sample(scan_id)
-    if not sample:
-        flash("Scan not found.")
-        return redirect(url_for("scanning.index"))
+    sample = _owned_sample(scan_id)
 
     stored = models.get_report(scan_id)
     findings = models.get_findings(scan_id)
@@ -100,9 +111,7 @@ def view_report(scan_id: str):
 @bp.route("/reports/<scan_id>.html", methods=["GET"])
 @login_required
 def standalone_report(scan_id: str):
-    sample = models.get_sample(scan_id)
-    if not sample:
-        abort(404)
+    _owned_sample(scan_id)
     from app.storage.report import REPORTS_ROOT
     path = REPORTS_ROOT / f"{scan_id}.html"
     if not path.exists():
@@ -113,14 +122,14 @@ def standalone_report(scan_id: str):
 @bp.route("/trends", methods=["GET"])
 @login_required
 def trends_page():
-    packages = models.list_distinct_packages()
+    packages = models.list_distinct_packages(uploaded_by=_current_user())
     return render_template("trends.html", packages=packages)
 
 
 @bp.route("/trend/<package_name>", methods=["GET"])
 @login_required
 def trend_view(package_name: str):
-    trend = build_trend(package_name)
+    trend = build_trend(package_name, uploaded_by=_current_user())
     return render_template("trend.html", trend=trend)
 
 
@@ -130,6 +139,7 @@ def triage_finding(finding_id: int):
     finding = models.get_finding(finding_id)
     if not finding:
         abort(404)
+    _owned_sample(finding["scan_id"])
 
     status = request.form.get("status", "open")
     if status not in ("open", "reviewed", "dismissed"):
@@ -153,9 +163,7 @@ def triage_finding(finding_id: int):
 @bp.route("/report/<scan_id>/pdf", methods=["GET"])
 @login_required
 def download_pdf(scan_id: str):
-    sample = models.get_sample(scan_id)
-    if not sample:
-        abort(404)
+    sample = _owned_sample(scan_id)
 
     from app.storage.report import REPORTS_ROOT
     pdf_path = REPORTS_ROOT / f"{scan_id}.pdf"
@@ -169,7 +177,7 @@ def download_pdf(scan_id: str):
 @bp.route("/compare", methods=["GET"])
 @login_required
 def compare_page():
-    samples = models.list_samples()
+    samples = _my_samples()
     return render_template("compare.html", samples=samples)
 
 
@@ -182,6 +190,8 @@ def compare_result():
         flash("Select two scans to compare.")
         return redirect(url_for("scanning.compare_page"))
 
+    _owned_sample(scan_a)
+    _owned_sample(scan_b)
     diff = diff_reports(scan_a, scan_b)
     return render_template("compare_result.html", diff=diff)
 
@@ -189,7 +199,7 @@ def compare_result():
 @bp.route("/compare/matrix", methods=["GET"])
 @login_required
 def compare_matrix_page():
-    samples = models.list_samples()
+    samples = _my_samples()
     return render_template("compare_matrix.html", samples=samples)
 
 
@@ -201,6 +211,8 @@ def compare_matrix_result():
         flash("Select at least two scans to compare.")
         return redirect(url_for("scanning.compare_matrix_page"))
 
+    for sid in scan_ids:
+        _owned_sample(sid)
     matrix = build_matrix(scan_ids)
     return render_template("compare_matrix_result.html", matrix=matrix)
 
@@ -208,7 +220,7 @@ def compare_matrix_result():
 @bp.route("/dynamic", methods=["GET"])
 @login_required
 def dynamic_page():
-    samples = models.list_samples()
+    samples = _my_samples()
     devices = android_runtime.list_devices()
     return render_template("dynamic.html", samples=samples, devices=devices)
 
@@ -218,10 +230,7 @@ def dynamic_page():
 def dynamic_start():
     scan_id = request.form["scan_id"]
     serial = request.form["serial"]
-    sample = models.get_sample(scan_id)
-    if not sample:
-        flash("Scan not found.")
-        return redirect(url_for("scanning.dynamic_page"))
+    sample = _owned_sample(scan_id)
 
     capture_traffic = request.form.get("capture_traffic") == "on"
     bypass_ssl_pinning = request.form.get("bypass_ssl_pinning") == "on"
@@ -238,13 +247,14 @@ def dynamic_start():
 @bp.route("/dynamic/session/<scan_id>", methods=["GET"])
 @login_required
 def dynamic_session(scan_id: str):
-    sample = models.get_sample(scan_id)
+    sample = _owned_sample(scan_id)
     return render_template("dynamic_session.html", sample=sample, scan_id=scan_id)
 
 
 @bp.route("/dynamic/poll/<scan_id>", methods=["GET"])
 @login_required
 def dynamic_poll(scan_id: str):
+    _owned_sample(scan_id)
     from flask import jsonify
     state = android_runtime.poll_session(scan_id)
     if state is None:
@@ -255,6 +265,7 @@ def dynamic_poll(scan_id: str):
 @bp.route("/dynamic/stop/<scan_id>", methods=["POST"])
 @login_required
 def dynamic_stop(scan_id: str):
+    _owned_sample(scan_id)
     android_runtime.stop_session(scan_id)
     return redirect(url_for("scanning.view_report", scan_id=scan_id))
 
@@ -262,6 +273,7 @@ def dynamic_stop(scan_id: str):
 @bp.route("/dynamic/screenshot/<scan_id>", methods=["POST"])
 @login_required
 def dynamic_screenshot(scan_id: str):
+    _owned_sample(scan_id)
     from flask import jsonify
     result = android_runtime.capture_screenshot(scan_id)
     if result is None:
@@ -272,6 +284,7 @@ def dynamic_screenshot(scan_id: str):
 @bp.route("/dynamic/screenshots/<scan_id>/<filename>", methods=["GET"])
 @login_required
 def dynamic_screenshot_file(scan_id: str, filename: str):
+    _owned_sample(scan_id)
     path = android_runtime.SCREENSHOTS_ROOT / scan_id / secure_filename(filename)
     if not path.exists():
         abort(404)
@@ -284,6 +297,7 @@ def dynamic_live(scan_id: str):
     """Near-live device screen: captures the current frame on each request
     (adb screencap takes ~1-2s, so this isn't real-time video — the frontend
     polls it on an interval to approximate a live view)."""
+    _owned_sample(scan_id)
     from flask import Response
     from app.dynamic_analysis import device as device_mod
 
@@ -303,6 +317,7 @@ def dynamic_live(scan_id: str):
 @bp.route("/dynamic/tap/<scan_id>", methods=["POST"])
 @login_required
 def dynamic_tap(scan_id: str):
+    _owned_sample(scan_id)
     from flask import jsonify
     from app.dynamic_analysis import device as device_mod
 
@@ -322,6 +337,7 @@ def dynamic_tap(scan_id: str):
 @bp.route("/dynamic/swipe/<scan_id>", methods=["POST"])
 @login_required
 def dynamic_swipe(scan_id: str):
+    _owned_sample(scan_id)
     from flask import jsonify
     from app.dynamic_analysis import device as device_mod
 
@@ -342,6 +358,7 @@ def dynamic_swipe(scan_id: str):
 @bp.route("/dynamic/key/<scan_id>", methods=["POST"])
 @login_required
 def dynamic_key(scan_id: str):
+    _owned_sample(scan_id)
     from flask import jsonify
     from app.dynamic_analysis import device as device_mod
 
@@ -356,6 +373,7 @@ def dynamic_key(scan_id: str):
 @bp.route("/dynamic/text/<scan_id>", methods=["POST"])
 @login_required
 def dynamic_text(scan_id: str):
+    _owned_sample(scan_id)
     from flask import jsonify
     from app.dynamic_analysis import device as device_mod
 

@@ -131,22 +131,34 @@ def press_key(serial: str, key: str) -> dict[str, Any]:
 def input_text(serial: str, text: str) -> dict[str, Any]:
     """Type text into the currently focused field.
 
-    `adb shell input text` treats spaces specially and has no real escaping
-    for shell metacharacters, so this only allows a conservative character
-    set — safe for typical login/search fields without shell-injection risk.
+    `adb shell` joins its arguments into one string and runs it through the
+    device's /bin/sh, so the text must be shell-quoted — otherwise input like
+    `abc;reboot` would run `reboot` on the device. `input text` itself also
+    uses `%s` for spaces and only handles printable ASCII.
     """
     import re
-    if not re.fullmatch(r"[\w\s@.\-+!#$%^&*(),:;'\"?/]*", text):
-        return {"success": False, "error": "text contains unsupported characters"}
+    import shlex
+    if not re.fullmatch(r"[\x20-\x7e]*", text):
+        return {"success": False, "error": "only printable ASCII text is supported"}
     android_text = text.replace(" ", "%s")
-    result = _run(["-s", serial, "shell", "input", "text", android_text], timeout=10)
+    command = "input text " + shlex.quote(android_text)
+    result = _run(["-s", serial, "shell", command], timeout=10)
     return {"success": result.returncode == 0, "stderr": result.stderr}
 
 
-def read_logcat(serial: str, package_name: str, max_lines: int = 200) -> list[str]:
-    """Snapshot the current logcat buffer filtered to the given package's PID."""
-    pid = get_pid(serial, package_name)
+def clear_logcat(serial: str) -> None:
+    """Empty the device's logcat buffer — call once at session start so later
+    reads only contain lines logged during the session."""
     _run(["-s", serial, "logcat", "-c"], timeout=10)
+
+
+def read_logcat(serial: str, package_name: str, max_lines: int = 200) -> list[str]:
+    """Snapshot the current logcat buffer filtered to the given package's PID.
+
+    Non-destructive: the buffer is not cleared here, so repeated polls (and
+    the final read at session stop) all see the full session's logs.
+    """
+    pid = get_pid(serial, package_name)
     args = ["-s", serial, "logcat", "-d"]
     if pid:
         args += ["--pid", pid]

@@ -7,7 +7,7 @@ import Java from 'frida-java-bridge';
  * OkHttp's CertificatePinner, and TrustManagerImpl (Android 7+ network
  * security config pinning).
  */
-Java.perform(function () {
+export function install() {
     // 1. Custom X509TrustManager implementations: neutralize checkServerTrusted.
     try {
         var X509TrustManager = Java.use("javax.net.ssl.X509TrustManager");
@@ -78,4 +78,4 @@ Java.perform(function () {
     } catch (e) {
         // Not present on this API level/ROM; not an error.
     }
-});
+}

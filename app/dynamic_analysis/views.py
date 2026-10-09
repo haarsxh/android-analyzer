@@ -11,15 +11,17 @@ ATTACH_RETRY_DELAY_SECONDS = 1.5
 
 SCRIPTS_DIR = Path(__file__).resolve().parent / "frida_scripts"
 
-# Passive observation hooks: always loaded, never alter app behavior.
-DEFAULT_SCRIPTS = ["crypto_hooks.js", "shared_prefs_hooks.js", "webview_hooks.js", "http_hooks.js"]
+# Every hook is compiled into this one bundle (see frida_scripts/src/index.js)
+# so they all share a single frida-java-bridge instance — loading hooks as
+# separate scripts made them interfere and could crash the target.
+HOOKS_BUNDLE = SCRIPTS_DIR / "hooks.js"
+
+# Passive observation hooks: always installed, never alter app behavior.
+DEFAULT_HOOKS = ["crypto", "shared_prefs", "webview", "http", "storage"]
 
 # Active bypass hooks: alter app behavior (defeat pinning/root checks), so
 # they're opt-in per session rather than always-on.
-OPTIONAL_SCRIPTS = {
-    "ssl_pinning_bypass": "ssl_pinning_bypass.js",
-    "root_emulator_bypass": "root_emulator_bypass.js",
-}
+OPTIONAL_HOOKS = ["ssl_pinning_bypass", "root_emulator_bypass"]
 
 
 class FridaBridge:
@@ -40,12 +42,12 @@ class FridaBridge:
             elif message.get("type") == "error":
                 self.events.append({"hook": "frida", "error": message.get("description", str(message))})
 
-    def attach(self, script_names: list[str] | None = None,
+    def attach(self, hook_names: list[str] | None = None,
                bypass_ssl_pinning: bool = False, bypass_root_detection: bool = False) -> dict[str, Any]:
-        """Attach to the target process and load the given hook scripts (or all defaults).
+        """Attach to the target process and install the given hook groups (or all defaults).
 
-        `bypass_ssl_pinning` / `bypass_root_detection` additionally load the
-        matching OPTIONAL_SCRIPTS entry — these actively alter app behavior,
+        `bypass_ssl_pinning` / `bypass_root_detection` additionally install the
+        matching OPTIONAL_HOOKS entry — these actively alter app behavior,
         so they're off unless explicitly requested.
         """
         try:
@@ -96,30 +98,33 @@ class FridaBridge:
 
         try:
             session = device.attach(pid)
+        except frida.ServerNotRunningError as e:
+            return {"success": False, "error": (
+                f"frida-server is not running on {self.device_serial} ({e}). Start it as root, e.g. "
+                "`adb root` then `adb shell \"setsid /data/local/tmp/frida-server -D\"`")}
         except Exception as e:
             return {"success": False, "error": f"failed to attach to {self.package_name} (pid {pid}): {e}"}
 
         self._session = session
-        names = list(script_names or DEFAULT_SCRIPTS)
+        names = list(hook_names or DEFAULT_HOOKS)
         if bypass_ssl_pinning:
-            names.append(OPTIONAL_SCRIPTS["ssl_pinning_bypass"])
+            names.append("ssl_pinning_bypass")
         if bypass_root_detection:
-            names.append(OPTIONAL_SCRIPTS["root_emulator_bypass"])
-        loaded = []
-        for name in names:
-            path = SCRIPTS_DIR / name
-            if not path.exists():
-                continue
-            try:
-                script = session.create_script(path.read_text())
-                script.on("message", self._on_message)
-                script.load()
-                self._scripts.append(script)
-                loaded.append(name)
-            except Exception as e:
-                self.events.append({"hook": "frida", "error": f"failed to load {name}: {e}"})
+            names.append("root_emulator_bypass")
 
-        return {"success": True, "loaded_scripts": loaded}
+        if not HOOKS_BUNDLE.exists():
+            return {"success": False, "error": f"{HOOKS_BUNDLE.name} not built — run `npm run build` in "
+                                               "app/dynamic_analysis/frida_scripts"}
+        try:
+            script = session.create_script(HOOKS_BUNDLE.read_text())
+            script.on("message", self._on_message)
+            script.load()
+            self._scripts.append(script)
+            loaded = script.exports_sync.start(names)
+        except Exception as e:
+            return {"success": False, "error": f"failed to load hooks: {e}"}
+
+        return {"success": True, "loaded_hooks": loaded}
 
     def get_events(self) -> list[dict[str, Any]]:
         with self._lock:

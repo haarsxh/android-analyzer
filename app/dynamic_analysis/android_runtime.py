@@ -6,13 +6,15 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app.dynamic_analysis import device
+from app.dynamic_analysis import data_dir, device, runtime_rules
 from app.dynamic_analysis.views import FridaBridge
 from app.dynamic_analysis.webproxy import TrafficProxy
 from app.storage import models
 from app.storage.report import build_report, save_report
 
 SCREENSHOTS_ROOT = Path(__file__).resolve().parent.parent.parent / "workdir" / "screenshots"
+LOGCAT_ROOT = Path(__file__).resolve().parent.parent.parent / "workdir" / "logcat"
+FINAL_LOGCAT_LINES = 5000
 
 # In-memory registry of active sessions, keyed by scan_id. Dynamic sessions are
 # inherently tied to a live device/process, so they aren't persisted to SQLite
@@ -60,6 +62,7 @@ class DynamicSession:
             self._note(f"device {self.serial} not found among connected devices")
             return {"success": False, "error": f"device {self.serial} not connected"}
 
+        device.clear_logcat(self.serial)  # so the session's logs start empty
         self._note(f"launching {self.package_name} on {self.serial}")
         launch_result = device.launch_app(self.serial, self.package_name, self.main_activity)
         if not launch_result["success"]:
@@ -74,7 +77,7 @@ class DynamicSession:
             bypass_ssl_pinning=bypass_ssl_pinning, bypass_root_detection=bypass_root_detection
         )
         if attach_result["success"]:
-            self._note(f"frida attached, loaded scripts: {attach_result['loaded_scripts']}")
+            self._note(f"frida attached, installed hooks: {attach_result['loaded_hooks']}")
         else:
             self._note(f"frida attach failed: {attach_result['error']}")
 
@@ -90,6 +93,22 @@ class DynamicSession:
 
         self.status = "running"
         return {"success": True, "frida": attach_result}
+
+    def _analyze_data_at_rest(self, frida_findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Copy the app's data folder off the device (after force-stop, so
+        everything is flushed) and check what it actually stores."""
+        try:
+            collected = data_dir.collect(self.serial, self.package_name, self.scan_id)
+        except Exception as e:  # never let evidence collection break session teardown
+            collected = {"success": False, "error": str(e)}
+        if not collected["success"]:
+            self._note(f"app data not collected: {collected['error']}")
+            return [{"source": "dynamic_storage", "severity": "Info", "title": "App data folder not analyzed",
+                     "description": collected["error"], "metadata": {}}]
+        self._note(f"app data collected ({collected['files']} files via {collected['mode']}) → {collected['path']}")
+        already_reported = {f["metadata"].get("key") for f in frida_findings
+                            if f["metadata"].get("hook") == "shared_prefs" and f["severity"] != "Info"}
+        return data_dir.analyze(collected, skip_pref_keys=already_reported)
 
     def poll(self) -> dict[str, Any]:
         events = self.bridge.get_events() if self.bridge else []
@@ -109,18 +128,26 @@ class DynamicSession:
             self.proxy.stop()
             traffic_summary = self.proxy.summarize_flows()
 
+        # Read logcat before force-stopping: once the process is gone its PID
+        # can't be resolved and the read would no longer be filtered to the app.
+        logcat_lines = device.read_logcat(self.serial, self.package_name, max_lines=FINAL_LOGCAT_LINES)
+        LOGCAT_ROOT.mkdir(parents=True, exist_ok=True)
+        (LOGCAT_ROOT / f"{self.scan_id}.txt").write_text("\n".join(logcat_lines))
+
         device.force_stop(self.serial, self.package_name)
         self.status = "stopped"
 
-        for event in (self.bridge.get_events() if self.bridge else []):
-            models.add_finding(
-                scan_id=self.scan_id,
-                source="dynamic_frida",
-                severity="Info",
-                title=f"Runtime event: {event.get('hook', 'unknown')}.{event.get('api', '')}",
-                description=str(event),
-                metadata=event,
-            )
+        frida_findings = runtime_rules.analyze_frida_events(self.bridge.get_events() if self.bridge else [])
+        findings = (
+            frida_findings
+            + runtime_rules.analyze_traffic(traffic_summary)
+            + runtime_rules.analyze_logcat(logcat_lines)
+            + self._analyze_data_at_rest(frida_findings)
+        )
+        for f in findings:
+            models.add_finding(scan_id=self.scan_id, **f)
+        self._note(f"saved {len(findings)} runtime findings "
+                   f"({len(traffic_summary)} traffic flows, {len(logcat_lines)} logcat lines analyzed)")
 
         stored = models.get_report(self.scan_id)
         parsed_app = None
