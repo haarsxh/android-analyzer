@@ -61,17 +61,42 @@ class TrafficProxy:
         return {"success": True, "flow_path": str(self.flow_path)}
 
     def summarize_flows(self) -> list[dict[str, Any]]:
-        """Extract a simple URL/method/status summary from the captured flow file."""
-        if not self.flow_path.exists() or not mitmdump_available():
-            return []
-        try:
-            result = subprocess.run(
-                ["mitmdump", "-nr", str(self.flow_path),
-                 "--set", "flow_detail=0",
-                 "-q"],
-                capture_output=True, text=True, timeout=30,
-            )
-            lines = [l for l in result.stdout.splitlines() if l.strip()]
-            return [{"raw": l} for l in lines]
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            return []
+        """Parse the captured flow file into per-request dicts (method, URL,
+        headers, truncated body, status) for runtime_rules.analyze_traffic."""
+        return read_flow_file(self.flow_path)
+
+
+MAX_BODY_CHARS = 4000
+
+
+def read_flow_file(flow_path: Path) -> list[dict[str, Any]]:
+    if not flow_path.exists():
+        return []
+    try:
+        from mitmproxy import http
+        from mitmproxy.io import FlowReader
+    except ImportError:
+        return []
+
+    flows = []
+    try:
+        with open(flow_path, "rb") as fh:
+            for flow in FlowReader(fh).stream():
+                if not isinstance(flow, http.HTTPFlow):
+                    continue
+                req, resp = flow.request, flow.response
+                flows.append({
+                    "method": req.method,
+                    "scheme": req.scheme,
+                    "host": req.pretty_host,
+                    "url": req.pretty_url,
+                    "request_headers": dict(req.headers),
+                    "request_body": (req.get_text(strict=False) or "")[:MAX_BODY_CHARS],
+                    "status": resp.status_code if resp else None,
+                    "response_headers": dict(resp.headers) if resp else {},
+                })
+    except Exception:
+        # A truncated flow file (proxy killed mid-write) still yields
+        # whatever flows were read before the bad record.
+        pass
+    return flows

@@ -15,8 +15,8 @@ Mirrors MobSF's real design, scoped to Android:
   scanning), `android_checks.py` (manifest/config security rules).
 - **Dynamic Analysis** (`app/dynamic_analysis/`): `android_runtime.py`
   (session orchestrator), `device.py` (adb control, incl. screenshots),
-  `views.py` (Frida Bridge), `frida_scripts/` (hook scripts — crypto,
-  SharedPreferences, WebView, HTTP observation, plus opt-in SSL-pinning and
+  `views.py` (Frida Bridge), `frida_scripts/` (hooks — crypto,
+  SharedPreferences, WebView, HTTP incl. legacy Apache HttpClient, plus opt-in SSL-pinning and
   root/emulator-detection bypass), `webproxy.py` (mitmproxy traffic capture).
 - **Security Intelligence** (`app/security_intel/`): `malware_checks.py`
   (local heuristics), `reputation.py` (optional hash-reputation lookup),
@@ -72,6 +72,27 @@ python -m app.main
 # open http://127.0.0.1:5000
 ```
 
+Server settings (environment variables):
+
+| Variable | Default | Notes |
+|---|---|---|
+| `ANALYZER_HOST` | `127.0.0.1` | Listening on anything else requires `FLASK_SECRET_KEY` to be set. |
+| `ANALYZER_PORT` | `5000` | macOS AirPlay Receiver also uses 5000 on all interfaces; change this if it conflicts. |
+| `ANALYZER_DEBUG` | off | Enables Werkzeug's debugger — an interactive Python console in the browser. Local only: the server refuses to start with it on a non-loopback host. |
+| `ANALYZER_MAX_UPLOAD_MB` | `200` | Larger uploads are rejected with a message. |
+| `ANALYZER_DB_PATH` | `reports/analyzer.db` | SQLite database location (the test suite points this at a temp file). |
+
+Tests:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+The suite covers the static and runtime rules (including real-device logcat noise and decompiled
+library code that must *not* be flagged), the adb text-input quoting, and the web app's access
+control, CSRF and login throttling.
+
 CLI (static analysis only, no web server):
 
 ```bash
@@ -82,8 +103,13 @@ python cli.py devices
 ### 4. Authentication
 
 The web UI now requires a real account: visit `/signup` to create one, then
-`/login`. Every page is gated behind `login_required` (session-based); scans
-are attributed to the logged-in username. Passwords are hashed with
+`/login`. Every page is gated behind `login_required` (session-based). **Scans
+are private to the user who uploaded them**: reports, PDFs, triage, compare,
+trends and dynamic sessions for anyone else's scan return 404, and lists only
+show your own scans. (Scans uploaded before accounts existed have no owner and
+are only reachable via the API.) Every form and in-page request carries a CSRF
+token, and logins are locked for 15 minutes after 5 failures for one username
+(or 20 from one IP). Passwords are hashed with
 Werkzeug's `generate_password_hash`/`check_password_hash` (salted PBKDF2) and
 never stored in plaintext.
 
@@ -136,11 +162,28 @@ Without this set, malware detection falls back to local heuristics only.
   time-boxed and any failure (no internet, rate limit) just means fewer location findings, never
   a failed scan. This reports where third-party SDK traffic *could* go (from static strings), not
   confirmed runtime connections — pair with a dynamic session + traffic capture for that.
+- **Provider-specific secret rules** (`sast_engine.PROVIDER_RULES`): exact formats for AWS access
+  key IDs and secret keys, Stripe, Google API/OAuth, Firebase server keys, OpenAI, Anthropic,
+  GitHub, Slack, SendGrid, Twilio and embedded private keys, each with a severity and a note on
+  what a leaked key of that type allows. Values are masked in reports, the same key found in Java
+  and smali is one finding, and they replace the generic keyword/entropy findings for that value.
+  Also: hardcoded encryption keys and static all-zero IVs in files that do encryption.
+- **App code vs. library code** (`static_analysis/libraries.py`): code findings that only occur in
+  bundled libraries (Google Play Services, Kotlin, OkHttp, …) are lowered one severity level and
+  collapsed into one finding per rule, labelled "library code only" — on InsecureBankv2 this turned
+  48 Play Services rows into 4 and put the app's own hardcoded key and zero IV at the top. The
+  runtime crypto attribution uses the same package list.
 - **Static analysis**: entropy-based secret detection (`sast_engine.scan_entropy_secrets`)
   catches high-randomness embedded strings that don't match a `key=`/`secret=` keyword pattern.
+  To keep it from drowning real secrets in noise, it skips well-known open-source library packages
+  (`kotlin/`, `okio/`, `androidx/`, …), Kotlin's mangled function names (`countLeadingZeroBits-7apg3OU`),
+  alphabet strings and lowercase class paths. Certificate-pin hashes (`"sha256/…"`) are reported as
+  an Info "certificate pinning in use" finding rather than a secret, and XML namespace URIs
+  (`http://schemas.android.com/…`) are not counted as cleartext HTTP URLs. Tested on AndroGoat:
+  62 findings → 30, with every removed one a false positive.
   `library_detector.py` identifies bundled third-party SDKs from the decompiled package tree and
   flags a small curated list with known CVE history for manual version verification.
-- **Dynamic analysis**: `frida_scripts/ssl_pinning_bypass.js` and `root_emulator_bypass.js` are
+- **Dynamic analysis**: the `ssl_pinning_bypass` and `root_emulator_bypass` hook groups are
   opt-in (they actively alter app behavior) — enable them per session via the checkboxes on the
   Dynamic page, or `bypass_ssl_pinning`/`bypass_root_detection` in the API. SSL pinning bypass is
   usually required before `webproxy.py`'s mitmproxy capture will see any traffic from apps that
@@ -152,10 +195,32 @@ Without this set, malware detection falls back to local heuristics only.
   it's on, click the screen to tap, click-and-drag to swipe (`POST /dynamic/tap|swipe/<scan_id>`,
   coordinates computed client-side from the image's natural size, which matches the device's real
   resolution 1:1), Back/Home/Recents buttons send key events (`POST /dynamic/key/<scan_id>`), and
-  the text field types into whatever's focused on the device (`POST /dynamic/text/<scan_id>`,
-  restricted to a safe character set since `adb shell input text` has no real quoting). This lets
+  the text field types into whatever's focused on the device (`POST /dynamic/text/<scan_id>`;
+  printable ASCII only, and shell-quoted because `adb shell` runs the command through the device's
+  `/bin/sh` — unquoted, input like `abc;reboot` would execute `reboot`). This lets
   you drive the app under test (navigate past onboarding, log in, trigger a specific screen)
   entirely from the browser, without needing separate access to the emulator/device.
+- **Runtime findings are scored, not just logged** (`dynamic_analysis/runtime_rules.py`): when a
+  session stops, three inputs are turned into deduplicated findings with real severities (repeats
+  collapse into one finding with an occurrence count; secret values are masked in the report):
+  - *Frida events* (`dynamic_frida`): crypto events carry the calling class, so weak algorithms are
+    only blamed on the app when its own code called them — MD5/SHA-1 used by Android's TLS stack or a
+    library like OkHttp (on every HTTPS connection) is reported as Info, "not app code". Then:
+    DES/3DES/RC4 or ECB-mode ciphers actually used (High; bare
+    `"AES"` counts as ECB since that's Android's default), AES keys under 128 bits (High), MD5/SHA-1
+    (Medium), sensitive keys like `password`/`token` written to SharedPreferences (High) or
+    high-entropy values written there (Medium), `addJavascriptInterface` (Medium), WebView loading
+    `http://` (Medium), cleartext HTTP connections (Medium), secrets in URL query params (High),
+    root/pinning checks that the bypass hooks defeated (Info), and hooks that failed to load (Info,
+    flagged as a coverage gap).
+  - *Captured traffic* (`dynamic_traffic`, needs "capture traffic"): the mitmproxy flow file is
+    parsed with mitmproxy's own `FlowReader` — cleartext HTTP per host (Medium), credentials/cookies
+    or sensitive body fields over HTTP (High), secrets in URLs (High), HTTP Basic auth (Medium),
+    missing HSTS (Low).
+  - *Logcat* (`dynamic_logcat`): sensitive `key=value` pairs, JWTs (High) and high-entropy tokens
+    (Medium) in the app's own log output. Logcat is cleared once at session start and read
+    non-destructively after that, so the final read covers the whole session; the full log is saved
+    to `workdir/logcat/<scan_id>.txt`.
 - **Findings triage**: each finding can be marked Open/Reviewed/Dismissed via the report page or
   API; dismissed findings are excluded from the risk score but stay visible (dimmed) in the UI.
 - **Compare & Trends**: the "Compare" page diffs findings between any two scans (e.g. two versions
@@ -193,22 +258,35 @@ Without this set, malware detection falls back to local heuristics only.
 - This is a from-scratch, Android-only reimplementation inspired by MobSF's
   architecture — it does not reuse MobSF's code.
 - Dynamic analysis is only as capable as the Frida hooks shipped in
-  `app/dynamic_analysis/frida_scripts/`; add more hooks and list them in
-  `views.py`'s `DEFAULT_SCRIPTS` (or `OPTIONAL_SCRIPTS` for opt-in
-  behavior-altering hooks) to extend coverage.
+  `app/dynamic_analysis/frida_scripts/src/hooks/`. To add one: write
+  `src/hooks/<name>.js` exporting an `install()` function, register it in
+  `src/index.js`'s `HOOKS` map, add its name to `views.py`'s `DEFAULT_HOOKS`
+  (or `OPTIONAL_HOOKS` for opt-in behavior-altering hooks), and rebuild.
+- **All hooks are compiled into one bundle (`frida_scripts/hooks.js`) on
+  purpose.** Each bundle carries its own copy of `frida-java-bridge`; loading
+  every hook as a separate script put several independent Java bridges into
+  the target process, which made hooks silently stop firing and
+  intermittently crashed the app (SIGSEGV). `views.py` loads `hooks.js` once
+  and calls its `start([...hook names])` RPC export to install the chosen
+  groups.
+- Hook only concrete classes, never interfaces — e.g. SharedPreferences
+  writes are hooked on `android.app.SharedPreferencesImpl$EditorImpl`, since
+  hooking the `SharedPreferences$Editor` interface never fires. A
+  `java.net.Socket.connect` hook was also tried and removed: it crashed the
+  target on its network thread.
 - **Frida hook scripts must be compiled, not edited in place.** Frida 16+
   dropped the auto-injected `Java`/`ObjC` globals for raw scripts — they now
   live in the separate `frida-java-bridge` npm package, which has to be
   bundled into the script at build time (`session.create_script()` doesn't
   support `require()` at runtime). Sources live in
-  `app/dynamic_analysis/frida_scripts/src/*.js` (each starting with
-  `import Java from 'frida-java-bridge';`); the actual files `views.py`
-  loads are the compiled bundles sitting next to `src/`. To edit a hook:
+  `app/dynamic_analysis/frida_scripts/src/` (`index.js` plus one module per
+  hook group under `src/hooks/`); the file `views.py` actually loads is the
+  compiled `hooks.js` next to `src/`. To edit a hook:
   ```bash
   cd app/dynamic_analysis/frida_scripts
   npm install   # first time only
-  # edit the file under src/
-  npm run build # recompiles every src/*.js into the loaded bundle
+  # edit the file under src/hooks/
+  npm run build # recompiles src/index.js (and every hook) into hooks.js
   ```
   A raw (uncompiled) hook script will silently fail with
   `ReferenceError: 'Java' is not defined` the moment it runs — that error in

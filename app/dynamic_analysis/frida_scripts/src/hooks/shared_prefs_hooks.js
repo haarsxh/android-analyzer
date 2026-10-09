@@ -4,9 +4,11 @@ import Java from 'frida-java-bridge';
  * Hooks SharedPreferences reads/writes to reveal what keys/values an app
  * persists locally, which is useful for spotting plaintext secrets.
  */
-Java.perform(function () {
+export function install() {
     try {
-        var Editor = Java.use("android.content.SharedPreferences$Editor");
+        // Must be the concrete class: SharedPreferences$Editor is an interface,
+        // and hooking an interface's methods never fires.
+        var Editor = Java.use("android.app.SharedPreferencesImpl$EditorImpl");
         ["putString", "putInt", "putBoolean", "putLong", "putFloat"].forEach(function (method) {
             try {
                 Editor[method].overloads.forEach(function (overload) {
@@ -23,4 +25,4 @@ Java.perform(function () {
     } catch (e) {
         send({ hook: "shared_prefs", error: "Editor hook failed: " + e });
     }
-});
+}

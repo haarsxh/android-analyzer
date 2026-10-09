@@ -1,14 +1,17 @@
 """Sample Store + Result Database: SQLite persistence for scans and findings."""
 from __future__ import annotations
 
-import sqlite3
 import json
+import os
+import sqlite3
 import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent.parent / "reports" / "analyzer.db"
+DB_PATH = Path(os.environ.get(
+    "ANALYZER_DB_PATH", Path(__file__).resolve().parent.parent.parent / "reports" / "analyzer.db"
+))
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS samples (
@@ -113,21 +116,26 @@ def get_sample(scan_id: str) -> dict | None:
         return dict(row) if row else None
 
 
-def list_samples_by_package(package_name: str) -> list[dict]:
+def list_samples_by_package(package_name: str, uploaded_by: str | None = None) -> list[dict]:
+    """All scans of a package, oldest first; only `uploaded_by`'s when given."""
+    query = "SELECT * FROM samples WHERE package_name = ?"
+    params: list = [package_name]
+    if uploaded_by is not None:
+        query += " AND uploaded_by = ?"
+        params.append(uploaded_by)
     with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM samples WHERE package_name = ? ORDER BY created_at ASC",
-            (package_name,),
-        ).fetchall()
+        rows = conn.execute(query + " ORDER BY created_at ASC", params).fetchall()
         return [dict(r) for r in rows]
 
 
-def list_distinct_packages() -> list[str]:
+def list_distinct_packages(uploaded_by: str | None = None) -> list[str]:
+    query = "SELECT DISTINCT package_name FROM samples WHERE package_name IS NOT NULL"
+    params: list = []
+    if uploaded_by is not None:
+        query += " AND uploaded_by = ?"
+        params.append(uploaded_by)
     with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT package_name FROM samples WHERE package_name IS NOT NULL "
-            "ORDER BY package_name"
-        ).fetchall()
+        rows = conn.execute(query + " ORDER BY package_name", params).fetchall()
         return [r["package_name"] for r in rows]
 
 

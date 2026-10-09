@@ -4,7 +4,7 @@ import Java from 'frida-java-bridge';
  * Hooks WebView.loadUrl / addJavascriptInterface to surface loaded URLs and
  * any JS bridge objects exposed to web content.
  */
-Java.perform(function () {
+export function install() {
     try {
         var WebView = Java.use("android.webkit.WebView");
         WebView.loadUrl.overload("java.lang.String").implementation = function (url) {
@@ -24,4 +24,4 @@ Java.perform(function () {
     } catch (e) {
         send({ hook: "webview", error: "addJavascriptInterface hook failed: " + e });
     }
-});
+}

@@ -1,5 +1,5 @@
 📦
-472206 /src/webview_hooks.js
+488750 /src/index.js
 ✄
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -13653,31 +13653,511 @@ var init_frida_java_bridge = __esm({
   }
 });
 
-// src/webview_hooks.js
-var require_webview_hooks = __commonJS({
-  "src/webview_hooks.js"() {
+// src/hooks/caller.js
+function findCaller() {
+  try {
+    var frames = frida_java_bridge_default.use("java.lang.Thread").currentThread().getStackTrace();
+    for (var i = 0; i < frames.length; i++) {
+      var cls = String(frames[i].getClassName());
+      var platform = PLATFORM_PREFIXES.some(function(p) {
+        return cls.indexOf(p) === 0;
+      });
+      if (!platform) {
+        return cls + "." + frames[i].getMethodName();
+      }
+    }
+  } catch (e) {
+  }
+  return null;
+}
+var PLATFORM_PREFIXES;
+var init_caller = __esm({
+  "src/hooks/caller.js"() {
     init_node_globals();
     init_frida_java_bridge();
-    frida_java_bridge_default.perform(function() {
-      try {
-        var WebView = frida_java_bridge_default.use("android.webkit.WebView");
-        WebView.loadUrl.overload("java.lang.String").implementation = function(url) {
-          send({ hook: "webview", api: "loadUrl", url });
-          return this.loadUrl(url);
-        };
-      } catch (e) {
-        send({ hook: "webview", error: "loadUrl hook failed: " + e });
-      }
-      try {
-        var WebView2 = frida_java_bridge_default.use("android.webkit.WebView");
-        WebView2.addJavascriptInterface.implementation = function(obj, name) {
-          send({ hook: "webview", api: "addJavascriptInterface", interface_name: name });
-          return this.addJavascriptInterface(obj, name);
-        };
-      } catch (e) {
-        send({ hook: "webview", error: "addJavascriptInterface hook failed: " + e });
-      }
-    });
+    PLATFORM_PREFIXES = [
+      "java.",
+      "javax.",
+      "sun.",
+      "libcore.",
+      "dalvik.",
+      "android.",
+      "com.android.",
+      "org.apache.harmony.",
+      "jdk."
+    ];
   }
 });
-export default require_webview_hooks();
+
+// src/hooks/crypto_hooks.js
+function install() {
+  try {
+    var Cipher = frida_java_bridge_default.use("javax.crypto.Cipher");
+    Cipher.doFinal.overload("[B").implementation = function(input) {
+      send({ hook: "crypto", api: "Cipher.doFinal", algorithm: this.getAlgorithm(), caller: findCaller() });
+      return this.doFinal(input);
+    };
+  } catch (e) {
+    send({ hook: "crypto", error: "Cipher hook failed: " + e });
+  }
+  try {
+    var MessageDigest = frida_java_bridge_default.use("java.security.MessageDigest");
+    MessageDigest.getInstance.overload("java.lang.String").implementation = function(algo) {
+      send({ hook: "crypto", api: "MessageDigest.getInstance", algorithm: algo, caller: findCaller() });
+      return this.getInstance(algo);
+    };
+  } catch (e) {
+    send({ hook: "crypto", error: "MessageDigest hook failed: " + e });
+  }
+  try {
+    var SecretKeySpec = frida_java_bridge_default.use("javax.crypto.spec.SecretKeySpec");
+    SecretKeySpec.$init.overload("[B", "java.lang.String").implementation = function(key, algo) {
+      send({ hook: "crypto", api: "SecretKeySpec", algorithm: algo, key_len: key.length, caller: findCaller() });
+      return this.$init(key, algo);
+    };
+  } catch (e) {
+    send({ hook: "crypto", error: "SecretKeySpec hook failed: " + e });
+  }
+}
+var init_crypto_hooks = __esm({
+  "src/hooks/crypto_hooks.js"() {
+    init_node_globals();
+    init_frida_java_bridge();
+    init_caller();
+  }
+});
+
+// src/hooks/shared_prefs_hooks.js
+function install2() {
+  try {
+    var Editor = frida_java_bridge_default.use("android.app.SharedPreferencesImpl$EditorImpl");
+    ["putString", "putInt", "putBoolean", "putLong", "putFloat"].forEach(function(method) {
+      try {
+        Editor[method].overloads.forEach(function(overload) {
+          overload.implementation = function() {
+            var args = Array.prototype.slice.call(arguments);
+            send({ hook: "shared_prefs", api: method, key: args[0], value: String(args[1]) });
+            return overload.apply(this, arguments);
+          };
+        });
+      } catch (e) {
+      }
+    });
+  } catch (e) {
+    send({ hook: "shared_prefs", error: "Editor hook failed: " + e });
+  }
+}
+var init_shared_prefs_hooks = __esm({
+  "src/hooks/shared_prefs_hooks.js"() {
+    init_node_globals();
+    init_frida_java_bridge();
+  }
+});
+
+// src/hooks/webview_hooks.js
+function install3() {
+  try {
+    var WebView = frida_java_bridge_default.use("android.webkit.WebView");
+    WebView.loadUrl.overload("java.lang.String").implementation = function(url) {
+      send({ hook: "webview", api: "loadUrl", url });
+      return this.loadUrl(url);
+    };
+  } catch (e) {
+    send({ hook: "webview", error: "loadUrl hook failed: " + e });
+  }
+  try {
+    var WebView2 = frida_java_bridge_default.use("android.webkit.WebView");
+    WebView2.addJavascriptInterface.implementation = function(obj, name) {
+      send({ hook: "webview", api: "addJavascriptInterface", interface_name: name });
+      return this.addJavascriptInterface(obj, name);
+    };
+  } catch (e) {
+    send({ hook: "webview", error: "addJavascriptInterface hook failed: " + e });
+  }
+}
+var init_webview_hooks = __esm({
+  "src/hooks/webview_hooks.js"() {
+    init_node_globals();
+    init_frida_java_bridge();
+  }
+});
+
+// src/hooks/http_hooks.js
+function install4() {
+  try {
+    var URL = frida_java_bridge_default.use("java.net.URL");
+    URL.openConnection.overload().implementation = function() {
+      send({ hook: "http", api: "URL.openConnection", url: this.toString() });
+      return this.openConnection();
+    };
+  } catch (e) {
+    send({ hook: "http", error: "URL.openConnection hook failed: " + e });
+  }
+  try {
+    var OkHttpClient = frida_java_bridge_default.use("okhttp3.Request$Builder");
+    OkHttpClient.url.overload("java.lang.String").implementation = function(url) {
+      send({ hook: "http", api: "OkHttp Request.Builder.url", url });
+      return this.url(url);
+    };
+  } catch (e) {
+  }
+  try {
+    var AbstractHttpClient = frida_java_bridge_default.use("org.apache.http.impl.client.AbstractHttpClient");
+    var EntityUtils = frida_java_bridge_default.use("org.apache.http.util.EntityUtils");
+    var EnclosingRequest = frida_java_bridge_default.use("org.apache.http.HttpEntityEnclosingRequest");
+    var execute = AbstractHttpClient.execute.overload(
+      "org.apache.http.HttpHost",
+      "org.apache.http.HttpRequest",
+      "org.apache.http.protocol.HttpContext"
+    );
+    execute.implementation = function(target, request, context) {
+      var line = request.getRequestLine();
+      var uri = line.getUri();
+      var url = uri.indexOf("://") !== -1 || target === null ? uri : target.toURI() + uri;
+      var event = { hook: "http", api: "Apache HttpClient.execute", method: line.getMethod(), url };
+      try {
+        var entity = frida_java_bridge_default.cast(request, EnclosingRequest).getEntity();
+        if (entity !== null && entity.isRepeatable()) {
+          event.body = String(EntityUtils.toString(entity)).substring(0, MAX_BODY_CHARS);
+        }
+      } catch (e) {
+      }
+      send(event);
+      return execute.call(this, target, request, context);
+    };
+  } catch (e) {
+  }
+}
+var MAX_BODY_CHARS;
+var init_http_hooks = __esm({
+  "src/hooks/http_hooks.js"() {
+    init_node_globals();
+    init_frida_java_bridge();
+    MAX_BODY_CHARS = 2e3;
+  }
+});
+
+// src/hooks/storage_hooks.js
+function clip(value) {
+  var s = String(value);
+  return s.length > MAX_VALUE_CHARS ? s.substring(0, MAX_VALUE_CHARS) + "\u2026" : s;
+}
+function contentValuesToObject(values) {
+  var out = {};
+  if (values === null) {
+    return out;
+  }
+  var it = values.keySet().iterator();
+  while (it.hasNext()) {
+    var key = String(it.next());
+    out[key] = clip(values.get(key));
+  }
+  return out;
+}
+function install5() {
+  try {
+    var SQLiteDatabase = frida_java_bridge_default.use("android.database.sqlite.SQLiteDatabase");
+    SQLiteDatabase.execSQL.overloads.forEach(function(overload) {
+      overload.implementation = function() {
+        var args = Array.prototype.slice.call(arguments);
+        var bind = args.length > 1 && args[1] !== null ? Array.prototype.map.call(args[1], function(v) {
+          return clip(v);
+        }) : [];
+        send({
+          hook: "storage",
+          api: "SQLiteDatabase.execSQL",
+          sql: clip(args[0]),
+          bind_args: bind,
+          db: String(this.getPath()),
+          caller: findCaller()
+        });
+        return overload.apply(this, arguments);
+      };
+    });
+    SQLiteDatabase.insertWithOnConflict.implementation = function(table, nullHack, values, conflict) {
+      send({
+        hook: "storage",
+        api: "SQLiteDatabase.insert",
+        table: String(table),
+        values: contentValuesToObject(values),
+        db: String(this.getPath()),
+        caller: findCaller()
+      });
+      return this.insertWithOnConflict(table, nullHack, values, conflict);
+    };
+    SQLiteDatabase.updateWithOnConflict.implementation = function(table, values, where, whereArgs, conflict) {
+      send({
+        hook: "storage",
+        api: "SQLiteDatabase.update",
+        table: String(table),
+        values: contentValuesToObject(values),
+        db: String(this.getPath()),
+        caller: findCaller()
+      });
+      return this.updateWithOnConflict(table, values, where, whereArgs, conflict);
+    };
+  } catch (e) {
+    send({ hook: "storage", error: "SQLite hooks failed: " + e });
+  }
+  try {
+    var FileOutputStream = frida_java_bridge_default.use("java.io.FileOutputStream");
+    var ctor = FileOutputStream.$init.overload("java.io.File", "boolean");
+    ctor.implementation = function(file, append) {
+      var caller = findCaller();
+      if (caller !== null && file !== null) {
+        send({
+          hook: "storage",
+          api: "FileOutputStream",
+          path: String(file.getAbsolutePath()),
+          append,
+          caller
+        });
+      }
+      return ctor.call(this, file, append);
+    };
+  } catch (e) {
+    send({ hook: "storage", error: "FileOutputStream hook failed: " + e });
+  }
+  try {
+    var File2 = frida_java_bridge_default.use("java.io.File");
+    var createTemp = File2.createTempFile.overload("java.lang.String", "java.lang.String", "java.io.File");
+    createTemp.implementation = function(prefix, suffix, dir) {
+      var result = createTemp.call(this, prefix, suffix, dir);
+      send({
+        hook: "storage",
+        api: "File.createTempFile",
+        path: String(result.getAbsolutePath()),
+        caller: findCaller()
+      });
+      return result;
+    };
+  } catch (e) {
+    send({ hook: "storage", error: "createTempFile hook failed: " + e });
+  }
+  try {
+    var ClipboardManager = frida_java_bridge_default.use("android.content.ClipboardManager");
+    ClipboardManager.setPrimaryClip.implementation = function(clipData) {
+      var text = "";
+      try {
+        text = String(clipData.getItemAt(0).coerceToText(frida_java_bridge_default.use("android.app.ActivityThread").currentApplication().getApplicationContext()));
+      } catch (err) {
+      }
+      send({ hook: "storage", api: "ClipboardManager.setPrimaryClip", text: clip(text), caller: findCaller() });
+      return this.setPrimaryClip(clipData);
+    };
+  } catch (e) {
+    send({ hook: "storage", error: "Clipboard hook failed: " + e });
+  }
+  try {
+    var KeyStore = frida_java_bridge_default.use("java.security.KeyStore");
+    KeyStore.getInstance.overload("java.lang.String").implementation = function(type) {
+      send({ hook: "storage", api: "KeyStore.getInstance", type: String(type), caller: findCaller() });
+      return this.getInstance(type);
+    };
+  } catch (e) {
+    send({ hook: "storage", error: "KeyStore hook failed: " + e });
+  }
+}
+var MAX_VALUE_CHARS;
+var init_storage_hooks = __esm({
+  "src/hooks/storage_hooks.js"() {
+    init_node_globals();
+    init_frida_java_bridge();
+    init_caller();
+    MAX_VALUE_CHARS = 300;
+  }
+});
+
+// src/hooks/ssl_pinning_bypass.js
+function install6() {
+  try {
+    var X509TrustManager = frida_java_bridge_default.use("javax.net.ssl.X509TrustManager");
+    var SSLContext = frida_java_bridge_default.use("javax.net.ssl.SSLContext");
+    var TrustManager = frida_java_bridge_default.registerClass({
+      name: "com.androidanalyzer.TrustManager",
+      implements: [X509TrustManager],
+      methods: {
+        checkClientTrusted: function() {
+        },
+        checkServerTrusted: function() {
+        },
+        getAcceptedIssuers: function() {
+          return [];
+        }
+      }
+    });
+    var TrustManagers = [TrustManager.$new()];
+    var SSLContext_init = SSLContext.init.overload(
+      "[Ljavax.net.ssl.KeyManager;",
+      "[Ljavax.net.ssl.TrustManager;",
+      "java.security.SecureRandom"
+    );
+    SSLContext_init.implementation = function(keyManager, trustManager, secureRandom) {
+      send({ hook: "ssl_bypass", api: "SSLContext.init", detail: "trust managers replaced" });
+      SSLContext_init.call(this, keyManager, TrustManagers, secureRandom);
+    };
+  } catch (e) {
+    send({ hook: "ssl_bypass", error: "SSLContext/TrustManager hook failed: " + e });
+  }
+  try {
+    var HostnameVerifier = frida_java_bridge_default.use("javax.net.ssl.HostnameVerifier");
+    var SSLSession = frida_java_bridge_default.use("javax.net.ssl.SSLSession");
+    var AllowAllVerifier = frida_java_bridge_default.registerClass({
+      name: "com.androidanalyzer.AllowAllHostnameVerifier",
+      implements: [HostnameVerifier],
+      methods: { verify: function() {
+        return true;
+      } }
+    });
+    var HttpsURLConnection = frida_java_bridge_default.use("javax.net.ssl.HttpsURLConnection");
+    HttpsURLConnection.setDefaultHostnameVerifier.implementation = function(verifier) {
+      send({ hook: "ssl_bypass", api: "HttpsURLConnection.setDefaultHostnameVerifier", detail: "replaced with allow-all" });
+      this.setDefaultHostnameVerifier(AllowAllVerifier.$new());
+    };
+    HttpsURLConnection.setHostnameVerifier.implementation = function(verifier) {
+      this.setHostnameVerifier(AllowAllVerifier.$new());
+    };
+  } catch (e) {
+    send({ hook: "ssl_bypass", error: "HostnameVerifier hook failed: " + e });
+  }
+  try {
+    var CertificatePinner = frida_java_bridge_default.use("okhttp3.CertificatePinner");
+    CertificatePinner.check.overload("java.lang.String", "java.util.List").implementation = function(hostname, certs) {
+      send({ hook: "ssl_bypass", api: "OkHttp3 CertificatePinner.check", hostname });
+    };
+  } catch (e) {
+  }
+  try {
+    var TrustManagerImpl = frida_java_bridge_default.use("com.android.org.conscrypt.TrustManagerImpl");
+    TrustManagerImpl.checkTrustedRecursive.implementation = function() {
+      send({ hook: "ssl_bypass", api: "TrustManagerImpl.checkTrustedRecursive" });
+      return frida_java_bridge_default.use("java.util.ArrayList").$new();
+    };
+  } catch (e) {
+  }
+}
+var init_ssl_pinning_bypass = __esm({
+  "src/hooks/ssl_pinning_bypass.js"() {
+    init_node_globals();
+    init_frida_java_bridge();
+  }
+});
+
+// src/hooks/root_emulator_bypass.js
+function install7() {
+  try {
+    var Runtime2 = frida_java_bridge_default.use("java.lang.Runtime");
+    var ROOT_INDICATORS = ["su", "which su", "busybox", "magisk"];
+    Runtime2.exec.overload("java.lang.String").implementation = function(cmd) {
+      if (ROOT_INDICATORS.some(function(i) {
+        return cmd.indexOf(i) !== -1;
+      })) {
+        send({ hook: "root_bypass", api: "Runtime.exec", cmd, action: "blocked" });
+        throw frida_java_bridge_default.use("java.io.IOException").$new("blocked by analyzer");
+      }
+      return this.exec(cmd);
+    };
+  } catch (e) {
+    send({ hook: "root_bypass", error: "Runtime.exec hook failed: " + e });
+  }
+  try {
+    var File2 = frida_java_bridge_default.use("java.io.File");
+    var ROOT_PATHS = [
+      "/system/app/Superuser.apk",
+      "/sbin/su",
+      "/system/bin/su",
+      "/system/xbin/su",
+      "/data/local/xbin/su",
+      "/data/local/bin/su",
+      "/system/sd/xbin/su",
+      "/system/bin/failsafe/su",
+      "/data/local/su",
+      "/su/bin/su",
+      "/system/xbin/busybox",
+      "/data/adb/magisk"
+    ];
+    File2.exists.implementation = function() {
+      var path = this.getAbsolutePath();
+      if (ROOT_PATHS.indexOf(path) !== -1) {
+        send({ hook: "root_bypass", api: "File.exists", path, action: "forced false" });
+        return false;
+      }
+      return this.exists();
+    };
+  } catch (e) {
+    send({ hook: "root_bypass", error: "File.exists hook failed: " + e });
+  }
+  try {
+    var Build = frida_java_bridge_default.use("android.os.Build");
+    var EMULATOR_FINGERPRINTS = ["generic", "unknown", "emulator", "sdk_gphone"];
+    var origFingerprint = Build.FINGERPRINT.value;
+    if (EMULATOR_FINGERPRINTS.some(function(f) {
+      return origFingerprint && origFingerprint.indexOf(f) !== -1;
+    })) {
+      send({ hook: "root_bypass", api: "Build.FINGERPRINT", detail: "device reports as emulator-like; not overridden (would require a stable spoof value)" });
+    }
+  } catch (e) {
+    send({ hook: "root_bypass", error: "Build fingerprint check failed: " + e });
+  }
+  try {
+    var Debug = frida_java_bridge_default.use("android.os.Debug");
+    Debug.isDebuggerConnected.implementation = function() {
+      send({ hook: "root_bypass", api: "Debug.isDebuggerConnected", action: "forced false" });
+      return false;
+    };
+  } catch (e) {
+    send({ hook: "root_bypass", error: "Debug.isDebuggerConnected hook failed: " + e });
+  }
+}
+var init_root_emulator_bypass = __esm({
+  "src/hooks/root_emulator_bypass.js"() {
+    init_node_globals();
+    init_frida_java_bridge();
+  }
+});
+
+// src/index.js
+var require_index = __commonJS({
+  "src/index.js"() {
+    init_node_globals();
+    init_frida_java_bridge();
+    init_crypto_hooks();
+    init_shared_prefs_hooks();
+    init_webview_hooks();
+    init_http_hooks();
+    init_storage_hooks();
+    init_ssl_pinning_bypass();
+    init_root_emulator_bypass();
+    var HOOKS = {
+      crypto: install,
+      shared_prefs: install2,
+      webview: install3,
+      http: install4,
+      storage: install5,
+      ssl_pinning_bypass: install6,
+      root_emulator_bypass: install7
+    };
+    rpc.exports = {
+      start(names) {
+        const installed = [];
+        frida_java_bridge_default.perform(function() {
+          names.forEach(function(name) {
+            const install8 = HOOKS[name];
+            if (!install8) {
+              send({ hook: "frida", error: "unknown hook group: " + name });
+              return;
+            }
+            try {
+              install8();
+              installed.push(name);
+            } catch (e) {
+              send({ hook: name, error: "install failed: " + e });
+            }
+          });
+        });
+        return installed;
+      }
+    };
+  }
+});
+export default require_index();

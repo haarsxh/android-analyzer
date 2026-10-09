@@ -288,7 +288,10 @@
   'malware_checks': 'Malware Analysis',
   'geolocation': 'Server Locations',
   'firebase_checker': 'Cloud/Firebase Misconfigurations',
-  'dynamic_frida': 'Dynamic Analysis (Runtime)'
+  'dynamic_frida': 'Dynamic Analysis (Runtime)',
+  'dynamic_traffic': 'Dynamic Analysis (Network Traffic)',
+  'dynamic_logcat': 'Dynamic Analysis (Log Leaks)',
+  'dynamic_storage': 'Dynamic Analysis (Data at Rest)'
 } %}
 
 {% for group in findings | groupby('source') %}
@@ -305,6 +308,7 @@
       <td>{{ f.description }}</td>
       <td>
         <form action="{{ url_for('scanning.triage_finding', finding_id=f.id) }}" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <select name="status" onchange="this.form.submit()" style="font-size:12px; padding:4px 8px;">
             <option value="open" {{ 'selected' if f.triage_status == 'open' }}>Open</option>
             <option value="reviewed" {{ 'selected' if f.triage_status == 'reviewed' }}>Reviewed</option>

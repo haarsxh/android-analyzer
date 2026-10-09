@@ -18,6 +18,9 @@ SOURCE_CATEGORY = {
     "geolocation": "Network / Server",
     "firebase_checker": "Cloud / Firebase",
     "dynamic_frida": "Dynamic / Runtime",
+    "dynamic_traffic": "Dynamic / Network Traffic",
+    "dynamic_logcat": "Dynamic / Log Leaks",
+    "dynamic_storage": "Dynamic / Data at Rest",
 }
 
 
@@ -158,10 +161,10 @@ def render_html(report: dict[str, Any]) -> str:
 </html>"""
 
 
-def build_trend(package_name: str) -> dict[str, Any]:
-    """Risk score / finding-count trend across all scans of the same package,
-    ordered chronologically (oldest first)."""
-    samples = models.list_samples_by_package(package_name)
+def build_trend(package_name: str, uploaded_by: str | None = None) -> dict[str, Any]:
+    """Risk score / finding-count trend across all scans of the same package
+    (only `uploaded_by`'s scans when given), ordered chronologically."""
+    samples = models.list_samples_by_package(package_name, uploaded_by=uploaded_by)
     points = []
     for sample in samples:
         report = build_report(sample["scan_id"])

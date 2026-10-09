@@ -22,6 +22,7 @@
 <div class="card">
   <h3>Start a session</h3>
   <form action="{{ url_for('scanning.dynamic_start') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <p>
       <label>Sample:
         <select name="scan_id" required>

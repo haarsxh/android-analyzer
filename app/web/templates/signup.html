@@ -4,6 +4,7 @@
 <div class="card" style="max-width:380px; margin: var(--space-xxl) auto; padding: var(--space-xxl) var(--space-xl);">
   <h2 style="margin-top:0; text-align:center">Create an account</h2>
   <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <p>
       <label style="display:block; font-size:13px; color: var(--color-ink-muted-48); margin-bottom:4px;">Username</label>
       <input type="text" name="username" value="{{ username or '' }}" required autofocus style="width:100%; border-radius: var(--radius-pill);">

@@ -5,7 +5,7 @@ import Java from 'frida-java-bridge';
  * on a rooted device or emulator (common in banking/finance apps) can still
  * be dynamically analyzed.
  */
-Java.perform(function () {
+export function install() {
     // 1. Runtime.exec-based root checks (su, which su, busybox, etc).
     try {
         var Runtime = Java.use("java.lang.Runtime");
@@ -64,4 +64,4 @@ Java.perform(function () {
     } catch (e) {
         send({ hook: "root_bypass", error: "Debug.isDebuggerConnected hook failed: " + e });
     }
-});
+}

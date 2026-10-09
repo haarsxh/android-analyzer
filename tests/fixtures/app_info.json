@@ -1,0 +1,267 @@
+{
+ "package_name": "owasp.sat.agoat",
+ "app_name": "AndroGoat - Insecure App (Kotlin)",
+ "version_name": "1.0",
+ "version_code": "1",
+ "min_sdk": "19",
+ "target_sdk": "33",
+ "max_sdk": null,
+ "is_debuggable": true,
+ "allow_backup": true,
+ "uses_cleartext_traffic": null,
+ "permissions": [
+  "android.permission.CAMERA",
+  "android.permission.INTERNET",
+  "android.permission.READ_EXTERNAL_STORAGE",
+  "android.permission.USE_BIOMETRIC",
+  "android.permission.USE_FINGERPRINT",
+  "android.permission.WRITE_EXTERNAL_STORAGE",
+  "owasp.sat.agoat.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+ ],
+ "dangerous_permissions": [
+  "android.permission.CAMERA",
+  "android.permission.READ_EXTERNAL_STORAGE",
+  "android.permission.WRITE_EXTERNAL_STORAGE"
+ ],
+ "activities": [
+  {
+   "name": "owasp.sat.agoat.QRCodeXSSActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.ClipboardActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.BinaryPatchingActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.InsecureStorageSharedPrefs",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.InputValidationsOSCMDInjectionMain2Activity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.InputValidationsWebViewURLActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.InsecureStorageSDCardActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.EmulatorDetectionActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.ContentProviderActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.TrafficActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.InsecureStorageSharedPrefs1Activity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.InsecureStorageSQLiteActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.HardCodeActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.AccessControl1ViewActivity",
+   "exported": "true",
+   "permission": null,
+   "deep_links": [
+    {
+     "scheme": "androgoat",
+     "host": "vulnapp",
+     "path": null,
+     "browsable": false,
+     "auto_verify": false
+    }
+   ]
+  },
+  {
+   "name": "owasp.sat.agoat.AccessControlIssue1Activity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.InsecureStorageTempActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.SQLinjectionActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.XSSActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.InsecureLoggingActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.RootDetectionActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.AIChatActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.MainActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.SplashActivity",
+   "exported": "true",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.KeyboardCacheActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.HardcodeViewActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.InputValidationsActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.CloudServicesActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.SideChannelDataLeakageActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.BioMetricAuthActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.InsecureStorageActivity",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  }
+ ],
+ "services": [
+  {
+   "name": "owasp.sat.agoat.DownloadInvoiceService",
+   "exported": "true",
+   "permission": null,
+   "deep_links": []
+  }
+ ],
+ "receivers": [
+  {
+   "name": "androidx.profileinstaller.ProfileInstallReceiver",
+   "exported": "true",
+   "permission": "android.permission.DUMP",
+   "deep_links": []
+  },
+  {
+   "name": "owasp.sat.agoat.ShowDataReceiver",
+   "exported": "true",
+   "permission": null,
+   "deep_links": []
+  }
+ ],
+ "providers": [
+  {
+   "name": "owasp.sat.agoat.ContentProviderActivity",
+   "exported": "true",
+   "permission": null,
+   "deep_links": []
+  },
+  {
+   "name": "androidx.startup.InitializationProvider",
+   "exported": "false",
+   "permission": null,
+   "deep_links": []
+  }
+ ],
+ "main_activity": "owasp.sat.agoat.SplashActivity",
+ "certificates": [
+  {
+   "subject": "Common Name: Android Debug, Organization: Android, Country: US",
+   "issuer": "Common Name: Android Debug, Organization: Android, Country: US",
+   "serial_number": "1",
+   "not_before": "2025-11-22 05:10:06+00:00",
+   "not_after": "2055-11-15 05:10:06+00:00",
+   "sha256": "0fbee68b42d0214a0800364ebf0eda61658761e0d8fe881eea7f0c4a5f3fd1ad"
+  }
+ ],
+ "md5": "8a38254ba65fa4ad4c6982f69ac72666",
+ "sha1": "7bd6736e38f9cede5accc5351b2f8d9373687fb9",
+ "sha256": "3e6f6b538b82874dd94c0d8cdadd69ba54d49b59d2c7eb055073892e8a4fc0e0",
+ "file_size": 7100535
+}

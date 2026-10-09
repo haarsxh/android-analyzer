@@ -6,6 +6,7 @@ import sqlite3
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash, check_password_hash
 
+from app.interface.security import login_throttle
 from app.storage import models
 
 bp = Blueprint("auth", __name__)
@@ -59,11 +60,20 @@ def login():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     next_path = _safe_next(request.form.get("next", ""))
+    client_ip = request.remote_addr or "unknown"
+
+    wait = login_throttle.retry_after(client_ip, username)
+    if wait:
+        flash(f"Too many failed login attempts. Try again in {(wait + 59) // 60} minute(s).")
+        return render_template("login.html", username=username, next=next_path), 429
 
     user = models.get_user_by_username(username)
     if not user or not check_password_hash(user["password_hash"], password):
+        login_throttle.record_failure(client_ip, username)
         flash("Invalid username or password.")
         return render_template("login.html", username=username, next=next_path)
+
+    login_throttle.record_success(client_ip, username)
 
     session["user_id"] = user["id"]
     session["username"] = user["username"]

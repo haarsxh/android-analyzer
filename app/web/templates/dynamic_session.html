@@ -6,6 +6,7 @@
 
 <div style="display:flex; gap: var(--space-sm); margin-bottom: var(--space-lg)">
   <form action="{{ url_for('scanning.dynamic_stop', scan_id=scan_id) }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn" type="submit">Stop session</button>
   </form>
   <button class="btn" id="screenshot-btn" type="button" style="background: var(--color-ink)">Capture screenshot</button>
@@ -94,6 +95,7 @@
 
 <script>
 const scanId = {{ scan_id | tojson }};
+const csrfToken = {{ csrf_token() | tojson }};
 
 async function poll() {
   const res = await fetch("{{ url_for('scanning.dynamic_poll', scan_id=scan_id) }}");
@@ -117,7 +119,7 @@ poll();
 setInterval(poll, 3000);
 
 document.getElementById('screenshot-btn').addEventListener('click', async function () {
-  await fetch(`/dynamic/screenshot/${scanId}`, { method: 'POST' });
+  await fetch(`/dynamic/screenshot/${scanId}`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } });
   poll();
 });
 
@@ -175,7 +177,7 @@ function toDeviceCoords(clientX, clientY) {
 async function postJSON(url, body) {
   return fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
     body: JSON.stringify(body || {}),
   });
 }
