@@ -164,6 +164,21 @@ class DynamicSession:
 def start_session(scan_id: str, serial: str, package_name: str,
                    main_activity: str | None = None, capture_traffic: bool = False,
                    bypass_ssl_pinning: bool = False, bypass_root_detection: bool = False) -> dict[str, Any]:
+    # End any session still running for this scan or on this device first.
+    # Otherwise its Frida hooks stay loaded in the app and the new session
+    # injects a second copy — two Java bridges in one process crash the app
+    # ("script has been destroyed"). A full stop also saves its findings.
+    with _SESSIONS_LOCK:
+        previous = [s for sid, s in _SESSIONS.items() if sid == scan_id or s.serial == serial]
+        for s in previous:
+            _SESSIONS.pop(s.scan_id, None)
+    for s in previous:
+        try:
+            s.stop()
+        except Exception:
+            if s.bridge:
+                s.bridge.detach()
+
     session = DynamicSession(scan_id, serial, package_name, main_activity)
     with _SESSIONS_LOCK:
         _SESSIONS[scan_id] = session

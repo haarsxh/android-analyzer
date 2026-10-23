@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -11,8 +12,18 @@ from typing import Any
 CAPTURE_ROOT = Path(__file__).resolve().parent.parent.parent / "workdir" / "traffic"
 
 
+def mitmdump_path() -> str | None:
+    """mitmdump from this app's own virtualenv (installed with requirements.txt),
+    falling back to PATH — the server is often started as `.venv/bin/python`
+    without activating the venv, so .venv/bin isn't on PATH."""
+    local = Path(sys.executable).parent / "mitmdump"
+    if local.exists():
+        return str(local)
+    return shutil.which("mitmdump")
+
+
 def mitmdump_available() -> bool:
-    return shutil.which("mitmdump") is not None
+    return mitmdump_path() is not None
 
 
 SETUP_INSTRUCTIONS = (
@@ -37,16 +48,23 @@ class TrafficProxy:
 
     def start(self) -> dict[str, Any]:
         if not mitmdump_available():
-            return {"success": False, "error": "mitmdump not found on PATH", "instructions": SETUP_INSTRUCTIONS}
+            return {"success": False, "error": "mitmdump not found (pip install -r requirements.txt)",
+                    "instructions": SETUP_INSTRUCTIONS}
 
         CAPTURE_ROOT.mkdir(parents=True, exist_ok=True)
+        # mitmdump prints a line per request; an unread PIPE would fill up and
+        # freeze the proxy (and the device's traffic with it), so log to a file.
+        self.log_path = CAPTURE_ROOT / f"{self.scan_id}.mitmdump.log"
+        self._log = open(self.log_path, "w")
         self._proc = subprocess.Popen(
-            ["mitmdump", "-p", str(self.port), "-w", str(self.flow_path)],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            [mitmdump_path(), "-p", str(self.port), "-w", str(self.flow_path)],
+            stdout=self._log, stderr=subprocess.STDOUT,
         )
         time.sleep(1)
         if self._proc.poll() is not None:
-            return {"success": False, "error": "mitmdump exited immediately", "instructions": SETUP_INSTRUCTIONS}
+            self._log.close()
+            tail = self.log_path.read_text(errors="replace")[-300:].strip()
+            return {"success": False, "error": f"mitmdump exited immediately: {tail}", "instructions": SETUP_INSTRUCTIONS}
 
         return {"success": True, "port": self.port, "flow_path": str(self.flow_path), "instructions": SETUP_INSTRUCTIONS}
 
@@ -58,6 +76,7 @@ class TrafficProxy:
             self._proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             self._proc.kill()
+        self._log.close()
         return {"success": True, "flow_path": str(self.flow_path)}
 
     def summarize_flows(self) -> list[dict[str, Any]]:
