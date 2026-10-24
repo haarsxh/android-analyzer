@@ -140,7 +140,9 @@ class DynamicSession:
         frida_findings = runtime_rules.analyze_frida_events(self.bridge.get_events() if self.bridge else [])
         findings = (
             frida_findings
-            + runtime_rules.analyze_traffic(traffic_summary)
+            + runtime_rules.analyze_traffic(
+                traffic_summary,
+                app_hosts=runtime_rules.app_hosts_from_events(self.bridge.get_events() if self.bridge else []))
             + runtime_rules.analyze_logcat(logcat_lines)
             + self._analyze_data_at_rest(frida_findings)
         )

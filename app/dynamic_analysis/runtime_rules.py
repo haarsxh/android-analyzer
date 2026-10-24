@@ -407,12 +407,47 @@ def analyze_frida_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # Captured traffic (mitmproxy flows, as summarized by webproxy.py)
 # ---------------------------------------------------------------------------
 
-def analyze_traffic(flows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+# The proxy sits in front of the whole emulator, so it records Android's own
+# background traffic too. The clearest case is the connectivity probe the OS
+# sends every few seconds ("is the internet working?") — a GET to /generate_204
+# or /gen_204 on a Google host. It has nothing to do with the app under test,
+# so it must not be reported as the app using cleartext HTTP.
+SYSTEM_PROBE_PATHS = {"/generate_204", "/gen_204"}
+GOOGLE_SYSTEM_DOMAINS = ("google.com", "googleapis.com", "gstatic.com", "android.com")
+
+
+def _is_system_probe(host: str, url: str) -> bool:
+    host = (host or "").lower()
+    on_google = any(host == d or host.endswith("." + d) for d in GOOGLE_SYSTEM_DOMAINS)
+    return on_google and urlsplit(url).path in SYSTEM_PROBE_PATHS
+
+
+def app_hosts_from_events(events: list[dict[str, Any]]) -> set[str]:
+    """Hosts the app itself contacted, according to its own Frida HTTP hooks."""
+    hosts = set()
+    for e in events:
+        if isinstance(e, dict) and e.get("hook") == "http" and e.get("url"):
+            host = urlsplit(str(e["url"])).hostname
+            if host:
+                hosts.add(host.lower())
+    return hosts
+
+
+def analyze_traffic(flows: list[dict[str, Any]], app_hosts: set[str] | frozenset = frozenset()) -> list[dict[str, Any]]:
+    """Findings for captured HTTP(S) flows.
+
+    `app_hosts` are hosts the app itself is known to have contacted; a flow to
+    one of those is always analyzed, even if it looks like an OS probe.
+    """
     c = _Collector("dynamic_traffic")
+    background: dict[str, int] = {}
     for f in flows:
         scheme = (f.get("scheme") or "").lower()
         host = f.get("host", "")
         url = f.get("url", "")
+        if _is_system_probe(host, url) and host.lower() not in app_hosts:
+            background[host] = background.get(host, 0) + 1
+            continue
         headers = {k.lower(): v for k, v in (f.get("request_headers") or {}).items()}
         body = f.get("request_body") or ""
         meta = {"method": f.get("method"), "url": url, "status": f.get("status")}
@@ -449,7 +484,18 @@ def analyze_traffic(flows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             c.add(("no_hsts", host), "Low", f"No HSTS header from {host}",
                   "The server doesn't send Strict-Transport-Security, so clients aren't told to refuse "
                   "downgraded HTTP connections.", meta)
-    return c.results()
+    results = c.results()
+    if background:
+        total = sum(background.values())
+        results.append({
+            "source": "dynamic_traffic", "severity": "Info",
+            "title": f"Android background connectivity checks ignored ({total} requests)",
+            "description": "The emulator's own internet checks (GET /generate_204 or /gen_204 to "
+                           + ", ".join(sorted(background)) + ") passed through the proxy. They come from "
+                           "Android itself, not the app, so they weren't checked for cleartext or sensitive data.",
+            "metadata": {"hosts": background, "occurrences": total},
+        })
+    return results
 
 
 def _sensitive_body_fields(body: str) -> list[str]:

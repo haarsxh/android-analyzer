@@ -207,3 +207,39 @@ def test_library_storage_is_info():
                                     "values": {"token": "abc"}, "db": "/d/analytics",
                                     "caller": "com.google.android.gms.measurement.internal.zzx.a"}])
     assert f["severity"] == "Info" and "library" in f["title"]
+
+
+# --- Android's own connectivity probes must not be blamed on the app ----------------
+
+def probe(host, path):
+    return {"method": "GET", "scheme": "http", "host": host, "url": f"http://{host}{path}",
+            "request_headers": {}, "request_body": "", "status": 204, "response_headers": {}}
+
+
+def test_android_connectivity_probes_are_summarised_not_flagged():
+    flows = [probe("connectivitycheck.gstatic.com", "/generate_204")] * 20 + [
+        probe("www.google.com", "/gen_204"), probe("play.googleapis.com", "/generate_204")]
+    found = rr.analyze_traffic(flows)
+    assert [f["severity"] for f in found] == ["Info"]
+    assert "22 requests" in found[0]["title"]
+    assert not any("Cleartext" in f["title"] for f in found)
+
+
+def test_real_app_cleartext_traffic_is_still_flagged_next_to_probes():
+    app = {**probe("demo.testfire.net", "/"), "url": "http://demo.testfire.net/"}
+    found = titles(rr.analyze_traffic([app, probe("connectivitycheck.gstatic.com", "/generate_204")]))
+    assert found["Cleartext HTTP traffic to demo.testfire.net"] == "Medium"
+    assert not any("gstatic" in t for t in found if t.startswith("Cleartext"))
+
+
+def test_only_the_probe_path_is_treated_as_system_traffic():
+    # An app that really calls a Google host with a different path is still analyzed.
+    flow = {**probe("www.google.com", "/search?q=x"), "url": "http://www.google.com/search?q=x"}
+    assert "Cleartext HTTP traffic to www.google.com" in titles(rr.analyze_traffic([flow]))
+
+
+def test_probe_host_the_app_itself_contacted_is_still_analyzed():
+    flows = [probe("www.google.com", "/gen_204")]
+    events = [{"hook": "http", "api": "OkHttp Request.Builder.url", "url": "http://www.google.com/gen_204"}]
+    found = rr.analyze_traffic(flows, app_hosts=rr.app_hosts_from_events(events))
+    assert "Cleartext HTTP traffic to www.google.com" in titles(found)
